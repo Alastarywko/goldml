@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XAUUSD ML Bot — Документация</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      line-height: 1.7;
+    }
+
+    header {
+      background: linear-gradient(135deg, #1a1f2e 0%, #0f1117 100%);
+      border-bottom: 1px solid #2d3748;
+      padding: 40px 0 32px;
+      text-align: center;
+    }
+
+    header h1 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      color: #f6d365;
+      letter-spacing: -0.5px;
+    }
+
+    header p {
+      margin-top: 8px;
+      color: #718096;
+      font-size: 1rem;
+    }
+
+    .badge {
+      display: inline-block;
+      margin: 12px 4px 0;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    .badge-gold  { background: #744210; color: #f6d365; }
+    .badge-green { background: #1a4731; color: #68d391; }
+    .badge-blue  { background: #1a365d; color: #90cdf4; }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 24px 60px;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin: 36px 0 0;
+      border-bottom: 2px solid #2d3748;
+      padding-bottom: 0;
+    }
+
+    .tab-btn {
+      padding: 10px 24px;
+      border: none;
+      border-radius: 8px 8px 0 0;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #1a202c;
+      color: #718096;
+      border: 1px solid #2d3748;
+      border-bottom: none;
+      margin-bottom: -2px;
+    }
+
+    .tab-btn.active {
+      background: #1e2d40;
+      color: #90cdf4;
+      border-color: #4299e1;
+      border-bottom: 2px solid #1e2d40;
+    }
+
+    .tab-content { display: none; padding-top: 32px; }
+    .tab-content.active { display: block; }
+
+    .step {
+      display: flex;
+      gap: 20px;
+      margin-bottom: 32px;
+      align-items: flex-start;
+    }
+
+    .step-num {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.9rem;
+      margin-top: 2px;
+    }
+    .ubuntu .step-num  { background: #2d3748; color: #fc8181; border: 2px solid #fc8181; }
+    .windows .step-num { background: #2d3748; color: #90cdf4; border: 2px solid #4299e1; }
+
+    .step-body { flex: 1; }
+
+    .step-body h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .ubuntu  .step-body h3 { color: #fc8181; }
+    .windows .step-body h3 { color: #90cdf4; }
+
+    .step-body p { color: #a0aec0; margin-bottom: 10px; font-size: 0.93rem; }
+
+    pre {
+      background: #1a202c;
+      border: 1px solid #2d3748;
+      border-radius: 8px;
+      padding: 14px 16px;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      margin: 10px 0;
+    }
+
+    code { font-family: "Fira Code", "Cascadia Code", "Consolas", monospace; }
+
+    pre code { color: #e2e8f0; }
+
+    .comment { color: #4a5568; }
+    .cmd     { color: #68d391; }
+    .kw      { color: #f6d365; }
+    .str     { color: #fc8181; }
+
+    .note {
+      background: #1a2744;
+      border-left: 3px solid #4299e1;
+      border-radius: 0 8px 8px 0;
+      padding: 12px 16px;
+      margin: 12px 0;
+      font-size: 0.88rem;
+      color: #90cdf4;
+    }
+
+    .warn {
+      background: #2d1b00;
+      border-left: 3px solid #d69e2e;
+      border-radius: 0 8px 8px 0;
+      padding: 12px 16px;
+      margin: 12px 0;
+      font-size: 0.88rem;
+      color: #f6d365;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 0.88rem;
+    }
+    th {
+      background: #1a202c;
+      color: #718096;
+      text-align: left;
+      padding: 8px 12px;
+      border-bottom: 1px solid #2d3748;
+      font-weight: 600;
+    }
+    td {
+      padding: 8px 12px;
+      border-bottom: 1px solid #1a202c;
+      color: #a0aec0;
+    }
+    td:first-child { color: #e2e8f0; font-family: monospace; }
+    tr:hover td { background: #1a202c; }
+
+    .divider {
+      border: none;
+      border-top: 1px solid #2d3748;
+      margin: 28px 0;
+    }
+
+    .file-tree {
+      background: #1a202c;
+      border: 1px solid #2d3748;
+      border-radius: 8px;
+      padding: 16px 20px;
+      font-family: monospace;
+      font-size: 0.85rem;
+      line-height: 1.8;
+      color: #a0aec0;
+    }
+    .file-tree .dir  { color: #90cdf4; }
+    .file-tree .file { color: #68d391; }
+    .file-tree .gray { color: #4a5568; }
+
+    footer {
+      text-align: center;
+      padding: 24px;
+      color: #4a5568;
+      font-size: 0.82rem;
+      border-top: 1px solid #1a202c;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⚡ XAUUSD ML Bot</h1>
+  <p>Торговый бот на основе машинного обучения для золота</p>
+  <div>
+    <span class="badge badge-gold">XAUUSD / Gold</span>
+    <span class="badge badge-green">LightGBM · ROC-AUC 0.63</span>
+    <span class="badge badge-blue">M1 · BUY + SELL</span>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('ubuntu', this)">🐧 Ubuntu — Обучение</button>
+    <button class="tab-btn" onclick="switchTab('windows', this)">🪟 Windows — Торговля</button>
+  </div>
+
+  <!-- ══════════════════════════════════════════ UBUNTU ══ -->
+  <div id="ubuntu" class="tab-content active ubuntu">
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h3>Системные зависимости</h3>
+        <p>Устанавливаем необходимые пакеты Ubuntu.</p>
+        <pre><code><span class="cmd">sudo apt update</span>
+<span class="cmd">sudo apt install -y python3-full python3-venv python3-pip build-essential git</span></code></pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h3>Создание проекта и виртуального окружения</h3>
+        <pre><code><span class="cmd">mkdir -p ~/projects/gold-ml/{data,models,notebooks,src,scripts,logs}</span>
+<span class="cmd">cd ~/projects/gold-ml</span>
+<span class="cmd">python3 -m venv .venv</span>
+<span class="cmd">source .venv/bin/activate</span>
+<span class="cmd">python -m pip install --upgrade pip wheel setuptools</span></code></pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h3>Установка Python-пакетов</h3>
+        <pre><code><span class="cmd">pip install -r requirements.txt</span></code></pre>
+        <p>Содержимое <code>requirements.txt</code>: pandas, numpy, scikit-learn, lightgbm, xgboost, matplotlib, joblib, jupyter.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <h3>Данные: тиковая история XAUUSD</h3>
+        <p>Экспортировать из MetaTrader 5 → История котировок → XAUUSD → тики → сохранить как CSV. Положить файл в <code>data/XAUUSD_TickData.csv</code>.</p>
+        <p>Формат файла: <code>Time, Ask, Bid, Volume</code></p>
+        <div class="note">Экспортировать с параметром «на основе реальных тиков» для максимального качества данных.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <h3>Агрегация тиков в M1 свечи</h3>
+        <p>Конвертируем 316 млн тиков в минутные OHLCV-свечи.</p>
+        <pre><code><span class="cmd">python src/ticks_to_ohlcv.py --tf M1</span></code></pre>
+        <p>Результат: <code>data/XAUUSD_TickData_M1.parquet</code> (~2 млн строк)</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <h3>Очистка данных</h3>
+        <p>Оставляем только данные с 2020 года — ранние данные имеют неточные временны́е метки.</p>
+        <pre><code><span class="comment"># В Python REPL или отдельном скрипте:</span>
+<span class="kw">import</span> pandas <span class="kw">as</span> pd
+df = pd.read_parquet(<span class="str">'data/XAUUSD_TickData_M1.parquet'</span>)
+df[df.index >= <span class="str">'2020-01-01'</span>].to_parquet(<span class="str">'data/XAUUSD_TickData_M1.parquet'</span>)</code></pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">7</div>
+      <div class="step-body">
+        <h3>Построение признаков и меток</h3>
+        <p>Строим технические индикаторы и метки для BUY и SELL раздельно.</p>
+        <pre><code><span class="comment"># Метка для лонга: цена растёт на $0.5 за 5 баров</span>
+<span class="cmd">python src/make_features.py --direction long</span>
+
+<span class="comment"># Метка для шорта: цена падает на $0.5 за 5 баров</span>
+<span class="cmd">python src/make_features.py --direction short</span></code></pre>
+        <p>Признаки: SMA, EMA, ATR, RSI, MACD, Bollinger, log returns, объём, час дня, день недели.</p>
+        <table>
+          <tr><th>Параметр</th><th>Значение</th><th>Описание</th></tr>
+          <tr><td>--horizon</td><td>5</td><td>Смотрим на 5 баров вперёд</td></tr>
+          <tr><td>--tp</td><td>0.5</td><td>Тейк-профит $0.50</td></tr>
+          <tr><td>--sl</td><td>0.5</td><td>Стоп-лосс $0.50</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">8</div>
+      <div class="step-body">
+        <h3>Обучение моделей</h3>
+        <pre><code><span class="cmd">python src/train.py --direction long</span>
+<span class="cmd">python src/train.py --direction short</span></code></pre>
+        <p>Разбивка: последние 2 года — тест, остальное — обучение (строго по времени, без перемешивания).</p>
+        <table>
+          <tr><th>Модель</th><th>ROC-AUC</th><th>Accuracy</th></tr>
+          <tr><td>Long (BUY)</td><td>0.6356</td><td>58.1%</td></tr>
+          <tr><td>Short (SELL)</td><td>0.6332</td><td>58.0%</td></tr>
+        </table>
+        <div class="note">ROC-AUC выше 0.5 означает что модель лучше случайного. Для финансов 0.63 — хороший результат.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">9</div>
+      <div class="step-body">
+        <h3>Оценка и выбор порога</h3>
+        <pre><code><span class="cmd">python src/evaluate.py --direction long</span></code></pre>
+        <table>
+          <tr><th>Порог</th><th>Winrate</th><th>Ср. PnL / сделку</th><th>Profit Factor</th></tr>
+          <tr><td>0.60</td><td>67.0%</td><td>$0.17</td><td>2.03</td></tr>
+          <tr><td>0.65</td><td>75.7%</td><td>$0.26</td><td>3.11</td></tr>
+          <tr><td>0.70</td><td>86.4%</td><td>$0.36</td><td>6.38</td></tr>
+        </table>
+        <div class="note">Реальный спред брокера: $0.02 — практически не влияет на результат.</div>
+        <p>Рекомендуемый порог: <strong>0.70</strong> (~13 сигналов в день).</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">10</div>
+      <div class="step-body">
+        <h3>Файлы для передачи на Windows</h3>
+        <div class="file-tree">
+<span class="dir">models/</span>
+├── <span class="file">lgbm_M1_h5_tp0.5_sl0.5_long.joblib</span>
+├── <span class="file">meta_M1_h5_tp0.5_sl0.5_long.json</span>
+├── <span class="file">lgbm_M1_h5_tp0.5_sl0.5_short.joblib</span>
+└── <span class="file">meta_M1_h5_tp0.5_sl0.5_short.json</span>
+<span class="dir">scripts/</span>
+├── <span class="file">bot.py</span>
+└── <span class="file">features.py</span>
+<span class="file">requirements_windows.txt</span>
+        </div>
+        <div class="warn">Папку <code>data/</code> передавать не нужно — бот берёт данные напрямую из MT5.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ══════════════════════════════════════════ WINDOWS ══ -->
+  <div id="windows" class="tab-content windows">
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h3>Установка Python 3.12</h3>
+        <p>Скачать Windows installer (64-bit):</p>
+        <pre><code>https://www.python.org/ftp/python/3.12.9/python-3.12.9-amd64.exe</code></pre>
+        <div class="warn">При установке обязательно поставить галочку: ☑ Add python.exe to PATH</div>
+        <p>Проверка:</p>
+        <pre><code><span class="cmd">python --version</span>
+<span class="comment"># Python 3.12.x</span></code></pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h3>Копирование файлов проекта</h3>
+        <p>Скопировать с Ubuntu на Windows (флешка / облако / сеть):</p>
+        <div class="file-tree">
+<span class="dir">C:\...\gold-ml\</span>
+├── <span class="dir">models\</span>
+│   ├── <span class="file">lgbm_M1_h5_tp0.5_sl0.5_long.joblib</span>
+│   ├── <span class="file">meta_M1_h5_tp0.5_sl0.5_long.json</span>
+│   ├── <span class="file">lgbm_M1_h5_tp0.5_sl0.5_short.joblib</span>
+│   └── <span class="file">meta_M1_h5_tp0.5_sl0.5_short.json</span>
+├── <span class="dir">scripts\</span>
+│   ├── <span class="file">bot.py</span>
+│   └── <span class="file">features.py</span>
+└── <span class="file">requirements_windows.txt</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h3>Виртуальное окружение и установка пакетов</h3>
+        <pre><code><span class="cmd">cd C:\...\gold-ml</span>
+<span class="cmd">python -m venv .venv</span>
+<span class="cmd">.venv\Scripts\activate</span>
+<span class="cmd">pip install -r requirements_windows.txt</span>
+<span class="cmd">pip install scikit-learn</span></code></pre>
+        <p>Проверка MetaTrader5:</p>
+        <pre><code><span class="cmd">python -c "import MetaTrader5; print('ok', MetaTrader5.__version__)"</span></code></pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <h3>Настройка MetaTrader 5</h3>
+        <p>Перед запуском бота в MT5 нужно:</p>
+        <ul style="padding-left:20px; color:#a0aec0; font-size:0.93rem; line-height:2;">
+          <li>Залогиниться на <strong>DEMO счёт</strong></li>
+          <li>Включить алготрейдинг: кнопка <strong>AutoTrading</strong> в панели инструментов</li>
+          <li>Убедиться что символ <strong>XAUUSD</strong> есть в Market Watch</li>
+        </ul>
+        <div class="warn">Всегда начинайте с демо-счёта. Минимум 1–2 недели наблюдения перед переходом на реальные деньги.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <h3>Запуск в режиме наблюдения (DRY-RUN)</h3>
+        <p>Без реальных ордеров — только логирование сигналов.</p>
+        <pre><code><span class="cmd">python scripts/bot.py --dry-run --lot 1 --threshold 0.70</span></code></pre>
+        <p>Вывод каждую минуту:</p>
+        <pre><code>[2026-04-10 16:41]  цена=3287.50  long=0.652  short=0.423  позиций: 0
+[2026-04-10 16:42]  цена=3288.10  long=0.724  short=0.341  позиций: 0  <span class="kw">&gt;&gt;&gt; BUY &lt;&lt;&lt;</span>
+[DRY-RUN] BUY 1.00 лот @ 3288.10  SL=3287.60  TP=3288.60</code></pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <h3>Запуск в боевом режиме (DEMO)</h3>
+        <pre><code><span class="cmd">python scripts/bot.py --lot 1 --threshold 0.70</span></code></pre>
+        <p>Все параметры командной строки:</p>
+        <table>
+          <tr><th>Параметр</th><th>По умолчанию</th><th>Описание</th></tr>
+          <tr><td>--threshold</td><td>0.70</td><td>Порог вероятности сигнала</td></tr>
+          <tr><td>--lot</td><td>None</td><td>Фиксированный лот (отменяет --risk)</td></tr>
+          <tr><td>--risk</td><td>1.0</td><td>Риск на сделку, % от баланса</td></tr>
+          <tr><td>--tp</td><td>0.5</td><td>Тейк-профит в $</td></tr>
+          <tr><td>--sl</td><td>0.5</td><td>Стоп-лосс в $</td></tr>
+          <tr><td>--symbol</td><td>XAUUSD</td><td>Торговый символ</td></tr>
+          <tr><td>--dry-run</td><td>выкл</td><td>Без реальных ордеров</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">7</div>
+      <div class="step-body">
+        <h3>Логи</h3>
+        <p>Каждый запуск создаёт файл лога:</p>
+        <pre><code>gold-ml\logs\bot_20260410_164100.log</code></pre>
+        <p>Логи содержат: время, цену, вероятности, количество позиций, все ордера и ошибки.</p>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<footer>
+  XAUUSD ML Bot · LightGBM · M1 · BUY + SELL · Только для DEMO перед боевым использованием
+</footer>
+
+<script>
+  function switchTab(id, btn) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    btn.classList.add('active');
+  }
+</script>
+
+</body>
+</html>
