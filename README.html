@@ -444,7 +444,7 @@ df[df.index >= <span class="str">'2020-01-01'</span>].to_parquet(<span class="st
         </div>
         <pre><code><span class="cmd">cd C:\...\goldml</span>
 <span class="cmd">.venv\Scripts\activate</span>
-<span class="cmd">python scripts/bot.py --dry-run --lot 1 --threshold 0.70</span></code></pre>
+<span class="cmd">python scripts/bot.py --dry-run --lot 1 --threshold 0.70 --tp-points 50 --sl-points 50</span></code></pre>
         <p>Вывод каждую минуту:</p>
         <pre><code>[2026-04-10 16:41]  цена=3287.50  long=0.652  short=0.423  позиций: 0
 [2026-04-10 16:42]  цена=3288.10  long=0.724  short=0.341  позиций: 0  <span class="kw">&gt;&gt;&gt; BUY &lt;&lt;&lt;</span>
@@ -458,18 +458,24 @@ df[df.index >= <span class="str">'2020-01-01'</span>].to_parquet(<span class="st
         <h3>Запуск в боевом режиме (DEMO)</h3>
         <pre><code><span class="cmd">cd C:\...\goldml</span>
 <span class="cmd">.venv\Scripts\activate</span>
-<span class="cmd">python scripts/bot.py --lot 1 --threshold 0.70</span></code></pre>
+<span class="cmd">python scripts/bot.py --lot 1 --threshold 0.70 --tp-points 50 --sl-points 50 --max-trades-day 10 --cooldown 5</span></code></pre>
         <p>Все параметры командной строки:</p>
         <table>
           <tr><th>Параметр</th><th>По умолчанию</th><th>Описание</th></tr>
-          <tr><td>--threshold</td><td>0.70</td><td>Порог вероятности сигнала</td></tr>
+          <tr><td>--threshold</td><td>0.70</td><td>Порог вероятности сигнала (0.0–1.0)</td></tr>
           <tr><td>--lot</td><td>None</td><td>Фиксированный лот (отменяет --risk)</td></tr>
-          <tr><td>--risk</td><td>1.0</td><td>Риск на сделку, % от баланса</td></tr>
-          <tr><td>--tp</td><td>0.5</td><td>Тейк-профит в $</td></tr>
-          <tr><td>--sl</td><td>0.5</td><td>Стоп-лосс в $</td></tr>
+          <tr><td>--risk</td><td>1.0</td><td>Риск на сделку, % от баланса (если --lot не задан)</td></tr>
+          <tr><td>--tp-points</td><td>50</td><td>Тейк-профит в пунктах (50 пунктов = $0.50 для XAUUSD)</td></tr>
+          <tr><td>--sl-points</td><td>50</td><td>Стоп-лосс в пунктах (50 пунктов = $0.50 для XAUUSD)</td></tr>
+          <tr><td>--max-trades-day</td><td>10</td><td>Максимум сделок в день</td></tr>
+          <tr><td>--cooldown</td><td>5</td><td>Пауза между сделками в минутах</td></tr>
           <tr><td>--symbol</td><td>XAUUSD</td><td>Торговый символ</td></tr>
-          <tr><td>--dry-run</td><td>выкл</td><td>Без реальных ордеров</td></tr>
+          <tr><td>--dry-run</td><td>выкл</td><td>Без реальных ордеров (только лог)</td></tr>
         </table>
+        <div class="note">
+          Для XAUUSD: 1 пункт = $0.01 цены.<br>
+          50 пунктов = $0.50 · 100 пунктов = $1.00 · 200 пунктов = $2.00
+        </div>
       </div>
     </div>
 

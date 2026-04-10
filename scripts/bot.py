@@ -58,10 +58,14 @@ def parse_args() -> argparse.Namespace:
                    help="Фиксированный лот (если задан, --risk игнорируется)")
     p.add_argument("--risk", type=float, default=1.0,
                    help="Риск на сделку, %% от баланса (игнорируется если задан --lot)")
-    p.add_argument("--tp", type=float, default=0.5,
-                   help="Тейк-профит в $ (цена)")
-    p.add_argument("--sl", type=float, default=0.5,
-                   help="Стоп-лосс в $ (цена)")
+    p.add_argument("--tp-points", type=int, default=50,
+                   help="Тейк-профит в пунктах (default: 50 = $0.50 для XAUUSD)")
+    p.add_argument("--sl-points", type=int, default=50,
+                   help="Стоп-лосс в пунктах (default: 50 = $0.50 для XAUUSD)")
+    p.add_argument("--max-trades-day", type=int, default=10,
+                   help="Макс. сделок в день (default: 10)")
+    p.add_argument("--cooldown", type=int, default=5,
+                   help="Минут паузы после сделки (default: 5)")
     p.add_argument("--dry-run", action="store_true",
                    help="Режим наблюдения: сигналы есть, ордеров нет")
     p.add_argument("--models-dir", default=None,
@@ -218,6 +222,17 @@ def run(args: argparse.Namespace) -> None:
     tag_long  = f"M1_h5_tp{args.tp}_sl{args.sl}_long"
     tag_short = f"M1_h5_tp{args.tp}_sl{args.sl}_short"
 
+    # Конвертируем пункты → доллары через символьную информацию MT5
+    sym_info = mt5lib.symbol_info(args.symbol)
+    point = sym_info.point  # для XAUUSD = 0.01
+    tp_price = round(args.tp_points * point, 2)
+    sl_price = round(args.sl_points * point, 2)
+    log.info(f"TP: {args.tp_points} пунктов = ${tp_price:.2f}  |  SL: {args.sl_points} пунктов = ${sl_price:.2f}")
+
+    # Перезаписываем tp/sl для остального кода
+    args.tp = tp_price
+    args.sl = sl_price
+
     model_long, meta_long = load_model(models_dir, tag_long)
     feature_cols = meta_long["feature_cols"]
     log.info(f"Модель LONG  загружена: {tag_long}   ROC-AUC={meta_long['roc_auc']}")
@@ -234,11 +249,23 @@ def run(args: argparse.Namespace) -> None:
     else:
         log.info(f"Порог: {args.threshold}  TP={args.tp}  SL={args.sl}  Риск={args.risk}%")
     log.info(f"Режим: {'DRY-RUN (без ордеров)' if args.dry_run else '⚠️  LIVE'}")
+    log.info(f"Макс. сделок в день: {args.max_trades_day}  Cooldown: {args.cooldown} мин")
     log.info("─" * 60)
+
+    trades_today = 0
+    last_trade_time = None
+    last_day = None
 
     while True:
         try:
             now = datetime.now(timezone.utc)
+
+            # Сброс счётчика в новый день
+            if last_day != now.date():
+                if last_day is not None:
+                    log.info(f"Новый день. Сделок вчера: {trades_today}")
+                trades_today = 0
+                last_day = now.date()
 
             # Ждём начала новой минуты (первые 5 секунд)
             if now.second > 5:
@@ -286,16 +313,29 @@ def run(args: argparse.Namespace) -> None:
             if has_open_position(mt5lib, args.symbol):
                 if signal_long or signal_short:
                     log.info("Позиция уже открыта — пропускаем")
+            elif trades_today >= args.max_trades_day:
+                if signal_long or signal_short:
+                    log.info(f"Лимит сделок на день ({args.max_trades_day}) достигнут — пропускаем")
+            elif last_trade_time and (now - last_trade_time).seconds < args.cooldown * 60:
+                remaining = args.cooldown * 60 - (now - last_trade_time).seconds
+                if signal_long or signal_short:
+                    log.info(f"Cooldown — ждём ещё {remaining} сек")
             else:
                 if args.lot is not None:
                     lot = args.lot
                 else:
                     lot = calc_lot(mt5lib, args.symbol, args.sl, args.risk)
 
+                opened = False
                 if signal_long:
-                    open_buy(mt5lib, args.symbol, lot, args.tp, args.sl, args.dry_run)
+                    opened = open_buy(mt5lib, args.symbol, lot, args.tp, args.sl, args.dry_run)
                 elif signal_short:
-                    open_sell(mt5lib, args.symbol, lot, args.tp, args.sl, args.dry_run)
+                    opened = open_sell(mt5lib, args.symbol, lot, args.tp, args.sl, args.dry_run)
+
+                if opened:
+                    trades_today += 1
+                    last_trade_time = now
+                    log.info(f"Сделок сегодня: {trades_today}/{args.max_trades_day}")
 
             # Пауза до следующей минуты
             time.sleep(52)
