@@ -214,24 +214,20 @@ def run(args: argparse.Namespace) -> None:
     log.info(f"MT5 подключён: {mt5lib.terminal_info().name}")
     log.info(f"Аккаунт: {mt5lib.account_info().login}  Баланс: ${mt5lib.account_info().balance:.2f}")
 
-    # Загрузка моделей
+    # Конвертируем пункты → доллары через символьную информацию MT5
+    sym_info = mt5lib.symbol_info(args.symbol)
+    point = sym_info.point  # для XAUUSD = 0.01
+    exec_tp = round(args.tp_points * point, 2)  # TP для реального ордера
+    exec_sl = round(args.sl_points * point, 2)  # SL для реального ордера
+    log.info(f"TP: {args.tp_points} пунктов = ${exec_tp:.2f}  |  SL: {args.sl_points} пунктов = ${exec_sl:.2f}")
+
+    # Загрузка моделей (тег всегда по обучающим параметрам tp=0.5 sl=0.5)
     models_dir = (
         Path(args.models_dir) if args.models_dir
         else Path(__file__).resolve().parent.parent / "models"
     )
-    tag_long  = f"M1_h5_tp{args.tp}_sl{args.sl}_long"
-    tag_short = f"M1_h5_tp{args.tp}_sl{args.sl}_short"
-
-    # Конвертируем пункты → доллары через символьную информацию MT5
-    sym_info = mt5lib.symbol_info(args.symbol)
-    point = sym_info.point  # для XAUUSD = 0.01
-    tp_price = round(args.tp_points * point, 2)
-    sl_price = round(args.sl_points * point, 2)
-    log.info(f"TP: {args.tp_points} пунктов = ${tp_price:.2f}  |  SL: {args.sl_points} пунктов = ${sl_price:.2f}")
-
-    # Перезаписываем tp/sl для остального кода
-    args.tp = tp_price
-    args.sl = sl_price
+    tag_long  = "M1_h5_tp0.5_sl0.5_long"
+    tag_short = "M1_h5_tp0.5_sl0.5_short"
 
     model_long, meta_long = load_model(models_dir, tag_long)
     feature_cols = meta_long["feature_cols"]
@@ -245,9 +241,9 @@ def run(args: argparse.Namespace) -> None:
         log.warning("Модель SHORT не найдена — торгуем только BUY")
 
     if args.lot is not None:
-        log.info(f"Порог: {args.threshold}  TP={args.tp}  SL={args.sl}  Лот={args.lot} (фиксированный)")
+        log.info(f"Порог: {args.threshold}  TP={args.tp_points}п  SL={args.sl_points}п  Лот={args.lot} (фиксированный)")
     else:
-        log.info(f"Порог: {args.threshold}  TP={args.tp}  SL={args.sl}  Риск={args.risk}%")
+        log.info(f"Порог: {args.threshold}  TP={args.tp_points}п  SL={args.sl_points}п  Риск={args.risk}%")
     log.info(f"Режим: {'DRY-RUN (без ордеров)' if args.dry_run else '⚠️  LIVE'}")
     log.info(f"Макс. сделок в день: {args.max_trades_day}  Cooldown: {args.cooldown} мин")
     log.info("─" * 60)
@@ -324,13 +320,13 @@ def run(args: argparse.Namespace) -> None:
                 if args.lot is not None:
                     lot = args.lot
                 else:
-                    lot = calc_lot(mt5lib, args.symbol, args.sl, args.risk)
+                    lot = calc_lot(mt5lib, args.symbol, exec_sl, args.risk)
 
                 opened = False
                 if signal_long:
-                    opened = open_buy(mt5lib, args.symbol, lot, args.tp, args.sl, args.dry_run)
+                    opened = open_buy(mt5lib, args.symbol, lot, exec_tp, exec_sl, args.dry_run)
                 elif signal_short:
-                    opened = open_sell(mt5lib, args.symbol, lot, args.tp, args.sl, args.dry_run)
+                    opened = open_sell(mt5lib, args.symbol, lot, exec_tp, exec_sl, args.dry_run)
 
                 if opened:
                     trades_today += 1
