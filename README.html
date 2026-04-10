@@ -391,7 +391,7 @@ df[df.index >= <span class="str">'2020-01-01'</span>].to_parquet(<span class="st
         <h3>Копирование файлов проекта</h3>
         <p>Скопировать с Ubuntu на Windows (флешка / облако / сеть):</p>
         <div class="file-tree">
-<span class="dir">C:\...\gold-ml\</span>
+<span class="dir">C:\...\goldml\</span>
 ├── <span class="dir">models\</span>
 │   ├── <span class="file">lgbm_M1_h5_tp0.5_sl0.5_long.joblib</span>
 │   ├── <span class="file">meta_M1_h5_tp0.5_sl0.5_long.json</span>
@@ -409,7 +409,7 @@ df[df.index >= <span class="str">'2020-01-01'</span>].to_parquet(<span class="st
       <div class="step-num">3</div>
       <div class="step-body">
         <h3>Виртуальное окружение и установка пакетов</h3>
-        <pre><code><span class="cmd">cd C:\...\gold-ml</span>
+        <pre><code><span class="cmd">cd C:\...\goldml</span>
 <span class="cmd">python -m venv .venv</span>
 <span class="cmd">.venv\Scripts\activate</span>
 <span class="cmd">pip install -r requirements_windows.txt</span>
@@ -438,7 +438,13 @@ df[df.index >= <span class="str">'2020-01-01'</span>].to_parquet(<span class="st
       <div class="step-body">
         <h3>Запуск в режиме наблюдения (DRY-RUN)</h3>
         <p>Без реальных ордеров — только логирование сигналов.</p>
-        <pre><code><span class="cmd">python scripts/bot.py --dry-run --lot 1 --threshold 0.70</span></code></pre>
+        <div class="warn">⚠️ Перед каждым запуском бота обязательно активируйте виртуальное окружение:<br><br>
+          <code>.venv\Scripts\activate</code><br><br>
+          В начале строки терминала должно появиться <code>(.venv)</code> — только тогда запускать бота.
+        </div>
+        <pre><code><span class="cmd">cd C:\...\goldml</span>
+<span class="cmd">.venv\Scripts\activate</span>
+<span class="cmd">python scripts/bot.py --dry-run --lot 1 --threshold 0.70</span></code></pre>
         <p>Вывод каждую минуту:</p>
         <pre><code>[2026-04-10 16:41]  цена=3287.50  long=0.652  short=0.423  позиций: 0
 [2026-04-10 16:42]  цена=3288.10  long=0.724  short=0.341  позиций: 0  <span class="kw">&gt;&gt;&gt; BUY &lt;&lt;&lt;</span>
@@ -450,7 +456,9 @@ df[df.index >= <span class="str">'2020-01-01'</span>].to_parquet(<span class="st
       <div class="step-num">6</div>
       <div class="step-body">
         <h3>Запуск в боевом режиме (DEMO)</h3>
-        <pre><code><span class="cmd">python scripts/bot.py --lot 1 --threshold 0.70</span></code></pre>
+        <pre><code><span class="cmd">cd C:\...\goldml</span>
+<span class="cmd">.venv\Scripts\activate</span>
+<span class="cmd">python scripts/bot.py --lot 1 --threshold 0.70</span></code></pre>
         <p>Все параметры командной строки:</p>
         <table>
           <tr><th>Параметр</th><th>По умолчанию</th><th>Описание</th></tr>
@@ -470,7 +478,7 @@ df[df.index >= <span class="str">'2020-01-01'</span>].to_parquet(<span class="st
       <div class="step-body">
         <h3>Логи</h3>
         <p>Каждый запуск создаёт файл лога:</p>
-        <pre><code>gold-ml\logs\bot_20260410_164100.log</code></pre>
+        <pre><code>goldml\logs\bot_20260410_164100.log</code></pre>
         <p>Логи содержат: время, цену, вероятности, количество позиций, все ордера и ошибки.</p>
       </div>
     </div>
