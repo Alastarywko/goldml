@@ -458,7 +458,9 @@ df[df.index >= <span class="str">'2020-01-01'</span>].to_parquet(<span class="st
         <h3>Запуск в боевом режиме (DEMO)</h3>
         <pre><code><span class="cmd">cd C:\...\goldml</span>
 <span class="cmd">.venv\Scripts\activate</span>
-<span class="cmd">python scripts/bot.py --lot 1 --threshold 0.70 --tp-points 50 --sl-points 50 --max-trades-day 10 --cooldown 5</span></code></pre>
+<span class="cmd">python scripts/bot.py --lot 1 --threshold 0.70 --tp-points 50 --sl-points 50</span></code></pre>
+        <p>С ограничениями:</p>
+        <pre><code><span class="cmd">python scripts/bot.py --lot 1 --threshold 0.70 --tp-points 50 --sl-points 50 --max-trades-day 5 --cooldown 60</span></code></pre>
         <p>Все параметры командной строки:</p>
         <table>
           <tr><th>Параметр</th><th>По умолчанию</th><th>Описание</th></tr>
@@ -467,8 +469,8 @@ df[df.index >= <span class="str">'2020-01-01'</span>].to_parquet(<span class="st
           <tr><td>--risk</td><td>1.0</td><td>Риск на сделку, % от баланса (если --lot не задан)</td></tr>
           <tr><td>--tp-points</td><td>50</td><td>Тейк-профит в пунктах (50 пунктов = $0.50 для XAUUSD)</td></tr>
           <tr><td>--sl-points</td><td>50</td><td>Стоп-лосс в пунктах (50 пунктов = $0.50 для XAUUSD)</td></tr>
-          <tr><td>--max-trades-day</td><td>10</td><td>Максимум сделок в день</td></tr>
-          <tr><td>--cooldown</td><td>5</td><td>Пауза между сделками в минутах</td></tr>
+          <tr><td>--max-trades-day</td><td>1000</td><td>Максимум сделок в день (1000 = без ограничения)</td></tr>
+          <tr><td>--cooldown</td><td>30</td><td>Пауза между сделками в <strong>секундах</strong></td></tr>
           <tr><td>--symbol</td><td>XAUUSD</td><td>Торговый символ</td></tr>
           <tr><td>--dry-run</td><td>выкл</td><td>Без реальных ордеров (только лог)</td></tr>
         </table>

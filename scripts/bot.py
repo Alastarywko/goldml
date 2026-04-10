@@ -62,10 +62,10 @@ def parse_args() -> argparse.Namespace:
                    help="Тейк-профит в пунктах (default: 50 = $0.50 для XAUUSD)")
     p.add_argument("--sl-points", type=int, default=50,
                    help="Стоп-лосс в пунктах (default: 50 = $0.50 для XAUUSD)")
-    p.add_argument("--max-trades-day", type=int, default=10,
-                   help="Макс. сделок в день (default: 10)")
-    p.add_argument("--cooldown", type=int, default=5,
-                   help="Минут паузы после сделки (default: 5)")
+    p.add_argument("--max-trades-day", type=int, default=1000,
+                   help="Макс. сделок в день (default: 1000)")
+    p.add_argument("--cooldown", type=int, default=30,
+                   help="Секунд паузы после сделки (default: 30)")
     p.add_argument("--dry-run", action="store_true",
                    help="Режим наблюдения: сигналы есть, ордеров нет")
     p.add_argument("--models-dir", default=None,
@@ -245,7 +245,7 @@ def run(args: argparse.Namespace) -> None:
     else:
         log.info(f"Порог: {args.threshold}  TP={args.tp_points}п  SL={args.sl_points}п  Риск={args.risk}%")
     log.info(f"Режим: {'DRY-RUN (без ордеров)' if args.dry_run else '⚠️  LIVE'}")
-    log.info(f"Макс. сделок в день: {args.max_trades_day}  Cooldown: {args.cooldown} мин")
+    log.info(f"Макс. сделок в день: {args.max_trades_day}  Cooldown: {args.cooldown} сек")
     log.info("─" * 60)
 
     trades_today = 0
@@ -312,8 +312,8 @@ def run(args: argparse.Namespace) -> None:
             elif trades_today >= args.max_trades_day:
                 if signal_long or signal_short:
                     log.info(f"Лимит сделок на день ({args.max_trades_day}) достигнут — пропускаем")
-            elif last_trade_time and (now - last_trade_time).seconds < args.cooldown * 60:
-                remaining = args.cooldown * 60 - (now - last_trade_time).seconds
+            elif last_trade_time and (now - last_trade_time).seconds < args.cooldown:
+                remaining = args.cooldown - (now - last_trade_time).seconds
                 if signal_long or signal_short:
                     log.info(f"Cooldown — ждём ещё {remaining} сек")
             else:
