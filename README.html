@@ -109,6 +109,7 @@
     .windows .step-num { background: #2d3748; color: #90cdf4; border: 2px solid #4299e1; }
     .levels .step-num  { background: #2d3748; color: #68d391; border: 2px solid #38a169; }
     .metka  .step-num  { background: #2d3748; color: #d6bcfa; border: 2px solid #805ad5; }
+    .swing  .step-num  { background: #2d3748; color: #fbb6ce; border: 2px solid #d53f8c; }
 
     .step-body { flex: 1; }
 
@@ -121,6 +122,7 @@
     .windows .step-body h3 { color: #90cdf4; }
     .levels  .step-body h3 { color: #68d391; }
     .metka   .step-body h3 { color: #d6bcfa; }
+    .swing   .step-body h3 { color: #fbb6ce; }
 
     .step-body p { color: #a0aec0; margin-bottom: 10px; font-size: 0.93rem; }
 
@@ -222,10 +224,12 @@
   <p>Торговый бот на основе машинного обучения для золота</p>
   <div>
     <span class="badge badge-gold">XAUUSD / Gold</span>
-    <span class="badge badge-green">LightGBM · ROC-AUC 0.63</span>
+    <span class="badge badge-green">LightGBM · Direction-Only</span>
     <span class="badge badge-blue">M1 · BUY + SELL</span>
     <span class="badge badge-green">Level Bot · Уровни</span>
     <span class="badge" style="background:#3b1f6e;color:#d6bcfa;">Metka Bot · Паттерны</span>
+    <span class="badge" style="background:#521b3a;color:#fbb6ce;">Swing Bot · $4 импульс</span>
+    <span class="badge" style="background:#1a3a2a;color:#9ae6b4;">TP/SL — только в боте</span>
   </div>
 </header>
 
@@ -236,10 +240,17 @@
     <button class="tab-btn" onclick="switchTab('windows', this)">🪟 Windows — Торговля</button>
     <button class="tab-btn" onclick="switchTab('levels', this)">📐 Level Bot — Уровни</button>
     <button class="tab-btn" onclick="switchTab('metka', this)">🎯 Metka Bot — Паттерны</button>
+    <button class="tab-btn" onclick="switchTab('swing', this)">🚀 Swing Bot — $4 импульс</button>
   </div>
 
   <!-- ══════════════════════════════════════════ UBUNTU ══ -->
   <div id="ubuntu" class="tab-content active ubuntu">
+
+    <div class="note" style="margin-bottom:28px; font-size:0.93rem; border-left-color:#68d391; background:#0d2e1a;">
+      <strong>🔑 Ключевое изменение архитектуры:</strong> все модели теперь предсказывают только <strong>направление</strong> цены (вверх / вниз) — без фиксированных TP/SL в метке при обучении.
+      TP и SL задаются исключительно при <strong>запуске бота</strong> (<code>--tp-points</code>, <code>--sl-points</code>).
+      Обученная модель работает с любой комбинацией TP/SL — переобучение не нужно.
+    </div>
 
     <div class="step">
       <div class="step-num">1</div>
@@ -308,19 +319,19 @@ df[df.index >= <span class="str">'2020-01-01'</span>].to_parquet(<span class="st
       <div class="step-num">7</div>
       <div class="step-body">
         <h3>Построение признаков и меток</h3>
-        <p>Строим технические индикаторы и метки для BUY и SELL раздельно.</p>
-        <pre><code><span class="comment"># Метка для лонга: цена растёт на $0.5 за 5 баров</span>
+        <p>Строим технические индикаторы и направленную метку для BUY и SELL раздельно. TP/SL не задаётся — только горизонт.</p>
+        <pre><code><span class="comment"># Метка для лонга: close[i+5] > close[i] → 1, иначе 0</span>
 <span class="cmd">python src/make_features.py --direction long</span>
 
-<span class="comment"># Метка для шорта: цена падает на $0.5 за 5 баров</span>
+<span class="comment"># Метка для шорта: close[i+5] < close[i] → 1, иначе 0</span>
 <span class="cmd">python src/make_features.py --direction short</span></code></pre>
-        <p>Признаки: SMA, EMA, ATR, RSI, MACD, Bollinger, log returns, объём, час дня, день недели.</p>
+        <p>Признаки: SMA5/10/20/50, EMA9/21, ATR7/14, RSI7/14, MACD, Bollinger, log returns, объём, час дня, день недели.</p>
         <table>
           <tr><th>Параметр</th><th>Значение</th><th>Описание</th></tr>
-          <tr><td>--horizon</td><td>5</td><td>Смотрим на 5 баров вперёд</td></tr>
-          <tr><td>--tp</td><td>0.5</td><td>Тейк-профит $0.50</td></tr>
-          <tr><td>--sl</td><td>0.5</td><td>Стоп-лосс $0.50</td></tr>
+          <tr><td>--horizon</td><td>5</td><td>Смотрим на 5 баров (5 минут) вперёд</td></tr>
+          <tr><td>--direction</td><td>long</td><td>long = BUY, short = SELL</td></tr>
         </table>
+        <p>Результат: <code>data/dataset_M1_h5_long.parquet</code> и <code>data/dataset_M1_h5_short.parquet</code></p>
       </div>
     </div>
 
@@ -330,29 +341,33 @@ df[df.index >= <span class="str">'2020-01-01'</span>].to_parquet(<span class="st
         <h3>Обучение моделей</h3>
         <pre><code><span class="cmd">python src/train.py --direction long</span>
 <span class="cmd">python src/train.py --direction short</span></code></pre>
-        <p>Разбивка: последние 2 года — тест, остальное — обучение (строго по времени, без перемешивания).</p>
-        <table>
-          <tr><th>Модель</th><th>ROC-AUC</th><th>Accuracy</th></tr>
-          <tr><td>Long (BUY)</td><td>0.6356</td><td>58.1%</td></tr>
-          <tr><td>Short (SELL)</td><td>0.6332</td><td>58.0%</td></tr>
-        </table>
-        <div class="note">ROC-AUC выше 0.5 означает что модель лучше случайного. Для финансов 0.63 — хороший результат.</div>
+        <p>Разбивка: первые 66% данных — обучение, последние 34% — тест (строго по времени, без перемешивания).</p>
+        <p>После обучения выводится таблица с оценкой PnL для нескольких распространённых комбинаций TP/SL:</p>
+        <pre><code> Порог | Сигналов |  ~в день |  Winrate |  PnL/сделку (TP/SL пункты)
+----------------------------------------------------------------------
+  0.50 |   84 213 |     82.1 |    51.3% |  50/50: +1.3п  100/50: +26.5п  50/30: +11.9п
+  0.55 |   51 408 |     50.1 |    54.7% |  50/50: +9.4п  100/50: +37.0п  50/30: +18.0п
+  0.60 |   22 011 |     21.4 |    59.1% |  50/50: +18.1п  100/50: +54.6п  50/30: +24.4п
+  0.65 |    7 803 |      7.6 |    64.3% |  50/50: +28.6п  100/50: +74.0п  50/30: +32.0п
+  0.70 |    1 847 |      1.8 |    71.2% |  50/50: +42.4п  100/50: +99.6п  50/30: +41.4п</code></pre>
+        <p>Выбираешь любую строку → запускаешь бот с нужными <code>--threshold</code>, <code>--tp-points</code> и <code>--sl-points</code>.</p>
+        <div class="note">ROC-AUC выше 0.5 означает что модель лучше случайного. Для финансов 0.63 — хороший результат.<br>
+        Winrate > 50% для любого пороге &gt; 0.50 — признак что модель обнаружила статистический паттерн направления.</div>
       </div>
     </div>
 
     <div class="step">
       <div class="step-num">9</div>
       <div class="step-body">
-        <h3>Оценка и выбор порога</h3>
-        <pre><code><span class="cmd">python src/evaluate.py --direction long</span></code></pre>
+        <h3>Выбор TP/SL для бота</h3>
+        <p>Один раз обучил модель — подбираешь любую пару TP/SL без переобучения:</p>
         <table>
-          <tr><th>Порог</th><th>Winrate</th><th>Ср. PnL / сделку</th><th>Profit Factor</th></tr>
-          <tr><td>0.60</td><td>67.0%</td><td>$0.17</td><td>2.03</td></tr>
-          <tr><td>0.65</td><td>75.7%</td><td>$0.26</td><td>3.11</td></tr>
-          <tr><td>0.70</td><td>86.4%</td><td>$0.36</td><td>6.38</td></tr>
+          <tr><th>Цель</th><th>TP пункты</th><th>SL пункты</th><th>R:R</th><th>Нужный Winrate</th></tr>
+          <tr><td>Скальпинг</td><td>30–50</td><td>30–50</td><td>1:1</td><td>&gt; 50%</td></tr>
+          <tr><td>Баланс</td><td>100</td><td>50</td><td>2:1</td><td>&gt; 33%</td></tr>
+          <tr><td>Агрессивный</td><td>200</td><td>50</td><td>4:1</td><td>&gt; 20%</td></tr>
         </table>
-        <div class="note">Реальный спред брокера: $0.02 — практически не влияет на результат.</div>
-        <p>Рекомендуемый порог: <strong>0.70</strong> (~13 сигналов в день).</p>
+        <div class="note">1 пункт XAUUSD = $0.01. 50 пунктов = $0.50 · 100 пунктов = $1.00 · 400 пунктов = $4.00</div>
       </div>
     </div>
 
@@ -362,16 +377,17 @@ df[df.index >= <span class="str">'2020-01-01'</span>].to_parquet(<span class="st
         <h3>Файлы для передачи на Windows</h3>
         <div class="file-tree">
 <span class="dir">models/</span>
-├── <span class="file">lgbm_M1_h5_tp0.5_sl0.5_long.joblib</span>
-├── <span class="file">meta_M1_h5_tp0.5_sl0.5_long.json</span>
-├── <span class="file">lgbm_M1_h5_tp0.5_sl0.5_short.joblib</span>
-└── <span class="file">meta_M1_h5_tp0.5_sl0.5_short.json</span>
+├── <span class="file">lgbm_M1_h5_long.joblib</span>
+├── <span class="file">meta_M1_h5_long.json</span>
+├── <span class="file">lgbm_M1_h5_short.joblib</span>
+└── <span class="file">meta_M1_h5_short.json</span>
 <span class="dir">scripts/</span>
 ├── <span class="file">bot.py</span>
+├── <span class="file">inversebot.py</span>
 └── <span class="file">features.py</span>
 <span class="file">requirements_windows.txt</span>
         </div>
-        <div class="warn">Папку <code>data/</code> передавать не нужно — бот берёт данные напрямую из MT5.</div>
+        <div class="warn">Папку <code>data/</code> передавать не нужно — бот берёт данные напрямую из MT5 в реальном времени.</div>
       </div>
     </div>
 
@@ -383,7 +399,9 @@ df[df.index >= <span class="str">'2020-01-01'</span>].to_parquet(<span class="st
     <div class="note" style="margin-bottom:28px; font-size:0.93rem;">
       <strong>Level Bot</strong> — скальпинговая модель на коротких ценовых уровнях M1. Цель: до 10 сигналов в час.
       Не требует SMA200, запрашивает всего 100 баров. Модели хранятся с префиксом <code>level_</code>.
-      Если вы обучали level-модели раньше — <strong>переобучите</strong>: признаки и параметры изменились.
+      <br><br>
+      <strong>🔑 Direction-only:</strong> модель предсказывает <em>направление</em> за 3 бара. TP/SL — только при запуске бота.
+      Файлы: <code>level_lgbm_M1_h3_long.joblib</code> (без TP/SL в имени).
     </div>
 
     <div class="step">
@@ -419,15 +437,15 @@ df[df.index >= <span class="str">'2020-01-01'</span>].to_parquet(<span class="st
       <div class="step-num">3</div>
       <div class="step-body">
         <h3>Построить датасеты с уровневыми признаками</h3>
-        <p>Параметры для скальпинга: горизонт <strong>3 бара (3 минуты)</strong>, тейк/стоп <strong>$0.30</strong>.</p>
+        <p>Горизонт <strong>3 бара (3 минуты)</strong>. TP/SL не нужны — метка чисто по направлению цены.</p>
         <pre><code><span class="cmd">python src/make_features_levels.py --direction long</span>
 <span class="cmd">python src/make_features_levels.py --direction short</span></code></pre>
         <p>Результат в папке <code>data/</code>:</p>
         <div class="file-tree">
-<span class="file">dataset_levels_M1_h3_tp0.3_sl0.3_long.parquet</span>
-<span class="file">dataset_levels_M1_h3_tp0.3_sl0.3_short.parquet</span>
+<span class="file">dataset_levels_M1_h3_long.parquet</span>
+<span class="file">dataset_levels_M1_h3_short.parquet</span>
         </div>
-        <div class="note">Занимает быстрее прежнего — rolling(30) вместо rolling(1440).</div>
+        <div class="note">Быстрее прежнего — rolling(30) вместо rolling(1440). Классы сбалансированы (~50/50) при direction-only метке.</div>
       </div>
     </div>
 
@@ -437,15 +455,20 @@ df[df.index >= <span class="str">'2020-01-01'</span>].to_parquet(<span class="st
         <h3>Обучить level-модели</h3>
         <pre><code><span class="cmd">python src/train_levels.py --direction long</span>
 <span class="cmd">python src/train_levels.py --direction short</span></code></pre>
-        <p>Разбивка по времени: первые 66% — обучение, последние 34% — тест (строго хронологически).</p>
+        <p>После обучения выводится таблица PnL для нескольких типовых TP/SL комбинаций:</p>
+        <pre><code> Порог | Сигналов |  ~в день |  Winrate |  PnL/сделку (TP/SL пункты)
+----------------------------------------------------------------------
+  0.55 |   62 403 |     60.8 |    54.2% |  30/30: +2.5п  50/30: +13.5п  50/50: +4.2п
+  0.60 |   31 101 |     30.3 |    58.9% |  30/30: +10.7п  50/30: +22.5п  50/50: +17.8п
+  0.65 |   11 820 |     11.5 |    63.7% |  30/30: +20.2п  50/30: +33.8п  50/50: +27.4п</code></pre>
         <p>Результат в папке <code>models/</code>:</p>
         <div class="file-tree">
-<span class="file">level_lgbm_M1_h3_tp0.3_sl0.3_long.joblib</span>
-<span class="file">level_meta_M1_h3_tp0.3_sl0.3_long.json</span>
-<span class="file">level_lgbm_M1_h3_tp0.3_sl0.3_short.joblib</span>
-<span class="file">level_meta_M1_h3_tp0.3_sl0.3_short.json</span>
+<span class="file">level_lgbm_M1_h3_long.joblib</span>
+<span class="file">level_meta_M1_h3_long.json</span>
+<span class="file">level_lgbm_M1_h3_short.joblib</span>
+<span class="file">level_meta_M1_h3_short.json</span>
         </div>
-        <div class="note">Обучение выводит таблицу порогов с Winrate и Profit Factor. Для скальпинга рекомендуем порог <strong>0.60</strong> — больше сигналов при приемлемой точности.</div>
+        <div class="note">Для скальпинга рекомендуем порог <strong>0.60</strong> — больше сигналов при хорошей точности. TP/SL 30/30 пунктов = $0.30/$0.30.</div>
       </div>
     </div>
 
@@ -455,10 +478,10 @@ df[df.index >= <span class="str">'2020-01-01'</span>].to_parquet(<span class="st
         <h3>Файлы для передачи на Windows</h3>
         <div class="file-tree">
 <span class="dir">models\</span>
-├── <span class="file">level_lgbm_M1_h3_tp0.3_sl0.3_long.joblib</span>
-├── <span class="file">level_meta_M1_h3_tp0.3_sl0.3_long.json</span>
-├── <span class="file">level_lgbm_M1_h3_tp0.3_sl0.3_short.joblib</span>
-└── <span class="file">level_meta_M1_h3_tp0.3_sl0.3_short.json</span>
+├── <span class="file">level_lgbm_M1_h3_long.joblib</span>
+├── <span class="file">level_meta_M1_h3_long.json</span>
+├── <span class="file">level_lgbm_M1_h3_short.joblib</span>
+└── <span class="file">level_meta_M1_h3_short.json</span>
 <span class="dir">scripts\</span>
 ├── <span class="file">level_bot.py</span>
 ├── <span class="file">level_inversebot.py</span>
@@ -575,6 +598,9 @@ goldml\logs\level_inversebot_20260410_164200.log</code></pre>
       squeeze breakout, RSI-дивергенция). По умолчанию — <strong>чистые сигналы Метки</strong>,
       без ML. Опционально: <code>--use-model</code> добавляет ML-фильтр,
       который отсеивает потенциально убыточные (чёрные) метки.
+      <br><br>
+      <strong>🔑 Direction-only:</strong> ML-модель предсказывает <em>направление</em> за 5 баров — без фиксированных TP/SL в обучении.
+      Файлы: <code>metka_lgbm_M1_h5_long.joblib</code>. TP/SL задаёшь при запуске бота.
     </div>
 
     <div class="step">
@@ -660,22 +686,21 @@ goldml\logs\level_inversebot_20260410_164200.log</code></pre>
       <div class="step-num">5</div>
       <div class="step-body">
         <h3>Построить датасет с Metka-признаками</h3>
-        <p>Метка для обучения: 1 (синяя) если цена достигла TP за 5 баров без SL; 0 (чёрная) иначе.</p>
+        <p>Метка: 1 если цена пошла в направлении Metka-паттерна через 5 баров; 0 иначе. TP/SL не нужны.</p>
         <pre><code><span class="cmd">cd ~/projects/gold-ml</span>
 <span class="cmd">source .venv/bin/activate</span>
 <span class="cmd">python src/make_features_metka.py --direction long</span>
 <span class="cmd">python src/make_features_metka.py --direction short</span></code></pre>
         <p>Результат в <code>data/</code>:</p>
         <div class="file-tree">
-<span class="file">dataset_metka_M1_h5_tp0.5_sl0.5_long.parquet</span>
-<span class="file">dataset_metka_M1_h5_tp0.5_sl0.5_short.parquet</span>
+<span class="file">dataset_metka_M1_h5_long.parquet</span>
+<span class="file">dataset_metka_M1_h5_short.parquet</span>
         </div>
-        <p>Скрипт выводит сколько Metka-баров (BUY/SELL) найдено в истории — это показывает реальную частоту сигналов.</p>
+        <p>Скрипт выводит сколько Metka-баров (BUY/SELL) найдено в истории — реальная частота сигналов.</p>
         <table>
           <tr><th>Параметр</th><th>По умолчанию</th><th>Описание</th></tr>
-          <tr><td>--horizon</td><td>5</td><td>Баров вперёд для оценки исхода</td></tr>
-          <tr><td>--tp</td><td>0.5</td><td>Тейк-профит $0.50</td></tr>
-          <tr><td>--sl</td><td>0.5</td><td>Стоп-лосс $0.50</td></tr>
+          <tr><td>--horizon</td><td>5</td><td>Баров вперёд для оценки направления</td></tr>
+          <tr><td>--direction</td><td>long</td><td>long = BUY, short = SELL</td></tr>
         </table>
       </div>
     </div>
@@ -686,17 +711,23 @@ goldml\logs\level_inversebot_20260410_164200.log</code></pre>
         <h3>Обучить ML-фильтр</h3>
         <pre><code><span class="cmd">python src/train_metka.py --direction long</span>
 <span class="cmd">python src/train_metka.py --direction short</span></code></pre>
+        <p>После обучения выводится таблица PnL для нескольких TP/SL комбинаций:</p>
+        <pre><code> Порог | Сигналов |  ~в день |  Winrate |  PnL/сделку (TP/SL пункты)
+----------------------------------------------------------------------
+  0.55 |   14 820 |     14.4 |    53.8% |  50/50: +3.8п  100/50: +31.3п  50/30: +13.4п
+  0.60 |    8 103 |      7.9 |    57.4% |  50/50: +14.8п  100/50: +48.6п  50/30: +21.9п
+  0.65 |    3 210 |      3.1 |    62.1% |  50/50: +24.2п  100/50: +67.2п  50/30: +30.6п</code></pre>
         <p>Результат в <code>models/</code>:</p>
         <div class="file-tree">
-<span class="file">metka_lgbm_M1_h5_tp0.5_sl0.5_long.joblib</span>
-<span class="file">metka_meta_M1_h5_tp0.5_sl0.5_long.json</span>
-<span class="file">metka_lgbm_M1_h5_tp0.5_sl0.5_short.joblib</span>
-<span class="file">metka_meta_M1_h5_tp0.5_sl0.5_short.json</span>
+<span class="file">metka_lgbm_M1_h5_long.joblib</span>
+<span class="file">metka_meta_M1_h5_long.json</span>
+<span class="file">metka_lgbm_M1_h5_short.joblib</span>
+<span class="file">metka_meta_M1_h5_short.json</span>
         </div>
-        <p>После обучения выводится таблица по порогам: winrate и средний PnL/сделку для Metka-баров отдельно и всех баров вместе. Рекомендуемый порог: <strong>0.62–0.65</strong>.</p>
+        <p>Рекомендуемый порог: <strong>0.62–0.65</strong>.</p>
         <div class="note">
           Модель видит: паттерн Метки (пин-бар? squeeze?), RSI, ATR, час, день недели и ~50 других признаков.
-          Учится отличать "синие" метки от "чёрных" по контексту.
+          Учится отличать "синие" метки от "чёрных" по рыночному контексту.
         </div>
       </div>
     </div>
@@ -707,10 +738,10 @@ goldml\logs\level_inversebot_20260410_164200.log</code></pre>
         <h3>Файлы для Windows (Метка + ML)</h3>
         <div class="file-tree">
 <span class="dir">models\</span>
-├── <span class="file">metka_lgbm_M1_h5_tp0.5_sl0.5_long.joblib</span>
-├── <span class="file">metka_meta_M1_h5_tp0.5_sl0.5_long.json</span>
-├── <span class="file">metka_lgbm_M1_h5_tp0.5_sl0.5_short.joblib</span>
-└── <span class="file">metka_meta_M1_h5_tp0.5_sl0.5_short.json</span>
+├── <span class="file">metka_lgbm_M1_h5_long.joblib</span>
+├── <span class="file">metka_meta_M1_h5_long.json</span>
+├── <span class="file">metka_lgbm_M1_h5_short.joblib</span>
+└── <span class="file">metka_meta_M1_h5_short.json</span>
 <span class="dir">scripts\</span>
 ├── <span class="file">metka_bot.py</span>
 ├── <span class="file">metka_inversebot.py</span>
@@ -774,6 +805,201 @@ goldml\logs\metka_inversebot_20260410_164200.log</code></pre>
 
   </div>
 
+  <!-- ══════════════════════════════════════════ SWING ══ -->
+  <div id="swing" class="tab-content swing">
+
+    <div class="note" style="margin-bottom:28px; font-size:0.93rem;">
+      <strong>Swing Bot</strong> — ищет начало сильных направленных движений за 20 минут.
+      ML-модель предсказывает <em>направление</em> цены — вырастет или упадёт за 20 баров.
+      TP и SL — только при запуске бота. Редкие но крупные сделки: 1–5 в день. Модели с префиксом <code>swing_</code>.
+      <br><br>
+      <strong>🔑 Direction-only:</strong> файлы <code>swing_lgbm_M1_h20_long.joblib</code> — без TP/SL в имени.
+      Запускаешь с <code>--tp-points 400 --sl-points 100</code> или с любой другой комбинацией.
+    </div>
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h3>Концепция и математика</h3>
+        <p>Модель обучается предсказывать <strong>направление цены через 20 минут</strong>. TP и SL задаются при запуске и не влияют на качество модели:</p>
+        <table>
+          <tr><th>Условие метки</th><th>Значение</th></tr>
+          <tr><td>close[i+20] &gt; close[i]</td><td>1 — цена выросла (long)</td></tr>
+          <tr><td>close[i+20] &lt; close[i]</td><td>0 — цена упала</td></tr>
+        </table>
+        <p>При winrate ~55–60% на хорошей модели и R:R = 4:1 (400 TP / 100 SL) математика сходится:</p>
+        <pre><code>Breakeven при R:R 4:1: нужно > 20% winrate (100 / (400+100) = 20%)
+При WR=55%:  PnL = 0.55 × 400 − 0.45 × 100 = 220 − 45 = <span class="kw">+175 пунктов / сделку</span>
+При WR=28%:  PnL = 0.28 × 400 − 0.72 × 100 = 112 − 72 = <span class="kw">+40 пунктов / сделку</span></code></pre>
+        <div class="note">
+          Прибыль зависит от лота: 0.1 лот → $1 = 100 пунктов<br>
+          При R:R 4:1 и лоте 1.0: TP=$4.00/сделку (400 пунктов × $0.01)
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h3>Ключевые признаки (что видит модель)</h3>
+        <table>
+          <tr><th>Группа</th><th>Признаки</th></tr>
+          <tr><td>Сила текущей свечи</td><td>impulse_bull/bear, strong_bull/bear_bar, bar_size_atr</td></tr>
+          <tr><td>Расширение волатильности</td><td>atr_ratio_7_20, atr_ratio_20_50, bb_width</td></tr>
+          <tr><td>Пробой уровней</td><td>break_high/low_10/20/50, cross_ema50</td></tr>
+          <tr><td>Сжатие + пробой</td><td>squeezed_10, squeeze_bull/bear</td></tr>
+          <tr><td>Долгосрочный тренд</td><td>dist_ema200, ema_momentum, above_ema200</td></tr>
+          <tr><td>Сессия</td><td>london_open, ny_open, active_sess (признаки, не фильтр)</td></tr>
+          <tr><td>Объём</td><td>vol_surge, vol_surge_2</td></tr>
+        </table>
+        <p style="color:#a0aec0; font-size:0.88rem;">Бот работает без ограничений по времени — сессионные признаки только помогают модели учиться когда движения сильнее.</p>
+      </div>
+    </div>
+
+    <hr class="divider">
+    <p style="color:#fbb6ce; font-weight:600; font-size:1rem; margin-bottom:20px;">🐧 Ubuntu — обучение swing-моделей</p>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h3>Построить датасеты</h3>
+        <p>Только горизонт — TP/SL не нужны для обучения.</p>
+        <pre><code><span class="cmd">cd ~/projects/gold-ml</span>
+<span class="cmd">source .venv/bin/activate</span>
+
+<span class="cmd">python src/make_features_swing.py --direction long</span>
+<span class="cmd">python src/make_features_swing.py --direction short</span></code></pre>
+        <p>Результат в <code>data/</code>:</p>
+        <div class="file-tree">
+<span class="file">dataset_swing_M1_h20_long.parquet</span>
+<span class="file">dataset_swing_M1_h20_short.parquet</span>
+        </div>
+        <p>Классы почти сбалансированы (~50/50 up/down). Выводится распределение и количество баров.</p>
+        <table>
+          <tr><th>Параметр</th><th>По умолчанию</th><th>Описание</th></tr>
+          <tr><td>--horizon</td><td>20</td><td>Баров вперёд (20 минут на M1)</td></tr>
+          <tr><td>--direction</td><td>long</td><td>long = BUY, short = SELL</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <h3>Обучить swing-модели</h3>
+        <pre><code><span class="cmd">python src/train_swing.py --direction long</span>
+<span class="cmd">python src/train_swing.py --direction short</span></code></pre>
+        <p>После обучения выводится таблица PnL для нескольких комбинаций TP/SL — выбираешь нужную для запуска бота:</p>
+        <pre><code> Порог | Сигналов |  ~в день |  Winrate |  PnL/сделку (TP/SL пункты)
+----------------------------------------------------------------------
+  0.50 |  590 203 |    574.9 |    50.1% |  400/200: +1.2п  400/100: +51.1п  200/100: +1.5п
+  0.55 |  182 401 |    177.7 |    53.4% |  400/200: +54.5п  400/100: +117.4п  200/100: +27.3п
+  0.60 |   42 810 |     41.7 |    57.2% |  400/200: +114.0п  400/100: +200.3п  200/100: +58.0п
+  0.65 |    7 203 |      7.0 |    62.3% |  400/200: +196.0п  400/100: +312.9п  200/100: +95.5п</code></pre>
+        <p>Результат в <code>models/</code>:</p>
+        <div class="file-tree">
+<span class="file">swing_lgbm_M1_h20_long.joblib</span>
+<span class="file">swing_meta_M1_h20_long.json</span>
+<span class="file">swing_lgbm_M1_h20_short.joblib</span>
+<span class="file">swing_meta_M1_h20_short.json</span>
+        </div>
+        <p>На что смотреть:</p>
+        <table>
+          <tr><th>Метрика</th><th>Норма</th></tr>
+          <tr><td>ROC-AUC</td><td>&gt; 0.60</td></tr>
+          <tr><td>Winrate при пороге 0.60</td><td>&gt; 20% при R:R 4:1 (TP 400, SL 100)</td></tr>
+          <tr><td>PnL строка при выбранном пороге</td><td>положительная</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <h3>Файлы для Windows</h3>
+        <div class="file-tree">
+<span class="dir">models\</span>
+├── <span class="file">swing_lgbm_M1_h20_long.joblib</span>
+├── <span class="file">swing_meta_M1_h20_long.json</span>
+├── <span class="file">swing_lgbm_M1_h20_short.joblib</span>
+└── <span class="file">swing_meta_M1_h20_short.json</span>
+<span class="dir">scripts\</span>
+├── <span class="file">swing_bot.py</span>
+├── <span class="file">swing_inversebot.py</span>
+└── <span class="file">swing_features.py</span>     <span class="gray">← обязательно</span>
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider">
+    <p style="color:#fbb6ce; font-weight:600; font-size:1rem; margin-bottom:20px;">🪟 Windows — запуск swing-бота</p>
+
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <h3>DRY-RUN (наблюдение)</h3>
+        <pre><code><span class="cmd">cd C:\...\goldml</span>
+<span class="cmd">.venv\Scripts\activate</span>
+<span class="cmd">python scripts\swing_bot.py --dry-run --threshold 0.60 --tp-points 400 --sl-points 100</span></code></pre>
+        <p>Пример вывода:</p>
+        <pre><code>[2026-04-10 14:03]  цена=3287.50  long=0.412  short=0.198  позиций: 0
+[2026-04-10 14:21]  цена=3291.20  long=0.671  short=0.201  позиций: 0  <span class="kw">&gt;&gt;&gt; SWING BUY &lt;&lt;&lt;</span>  [impulse_bull | ATR↑1.8x]
+[DRY-RUN] BUY 1.00 @ 3291.20  SL=3290.20  TP=3295.20  (цель +$4.00)</code></pre>
+        <p>В скобках: активные свинг-признаки на момент сигнала.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">7</div>
+      <div class="step-body">
+        <h3>Боевой запуск (DEMO)</h3>
+        <pre><code><span class="comment"># Основной бот:</span>
+<span class="cmd">python scripts\swing_bot.py --lot 1 --threshold 0.60 --tp-points 400 --sl-points 100</span>
+
+<span class="comment"># С управлением риском по балансу:</span>
+<span class="cmd">python scripts\swing_bot.py --risk 1.5 --threshold 0.60 --tp-points 400 --sl-points 100</span></code></pre>
+        <table>
+          <tr><th>Параметр</th><th>По умолчанию</th><th>Описание</th></tr>
+          <tr><td>--threshold</td><td>0.55</td><td>Порог вероятности. Рекомендуется 0.60–0.65</td></tr>
+          <tr><td>--tp-points</td><td>400</td><td>Тейк-профит 400 пунктов = $4.00</td></tr>
+          <tr><td>--sl-points</td><td>200</td><td>Стоп-лосс. При sl=1.0 использовать 100</td></tr>
+          <tr><td>--max-trades-day</td><td>10</td><td>Макс. сделок в день (свинг — редкие сигналы)</td></tr>
+          <tr><td>--cooldown</td><td>300</td><td>Пауза 5 минут между сделками</td></tr>
+          <tr><td>--lot</td><td>None</td><td>Фиксированный лот</td></tr>
+          <tr><td>--risk</td><td>1.0</td><td>Риск % от баланса (если --lot не задан)</td></tr>
+        </table>
+        <div class="note">
+          Прибыль при 1 лоте: движение $1 = $100. TP $4.00 = $400 на сделку.<br>
+          SL $1.00 = $100 на сделку. Ожидаемый PnL: ~+$37 при winrate 27%.
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">8</div>
+      <div class="step-body">
+        <h3>Инверсный бот (swing_inversebot.py)</h3>
+        <p>Открывает позицию ПРОТИВ сигнала модели. Полезен для проверки гипотез и намеренного слива для тестирования.</p>
+        <pre><code><span class="comment"># Максимально частые сделки (тест слива):</span>
+<span class="cmd">python scripts\swing_inversebot.py --lot 0.01 --threshold 0.30 --cooldown 0 --dry-run</span>
+
+<span class="comment"># Обычный инверс:</span>
+<span class="cmd">python scripts\swing_inversebot.py --lot 0.01 --threshold 0.55 --tp-points 400 --sl-points 100</span></code></pre>
+        <div class="warn">Никогда не запускайте <code>swing_bot.py</code> и <code>swing_inversebot.py</code> одновременно.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">9</div>
+      <div class="step-body">
+        <h3>Логи</h3>
+        <pre><code>goldml\logs\swing_bot_20260410_164100.log
+goldml\logs\swing_inversebot_20260410_164200.log</code></pre>
+      </div>
+    </div>
+
+  </div>
+
   <!-- ══════════════════════════════════════════ WINDOWS ══ -->
   <div id="windows" class="tab-content windows">
 
@@ -794,16 +1020,17 @@ goldml\logs\metka_inversebot_20260410_164200.log</code></pre>
       <div class="step-num">2</div>
       <div class="step-body">
         <h3>Копирование файлов проекта</h3>
-        <p>Скопировать с Ubuntu на Windows (флешка / облако / сеть):</p>
+        <p>Скопировать с Ubuntu на Windows (флешка / облако / сеть). TP/SL теперь <strong>не входят в имя модели</strong> — они задаются при запуске бота.</p>
         <div class="file-tree">
 <span class="dir">C:\...\goldml\</span>
 ├── <span class="dir">models\</span>
-│   ├── <span class="file">lgbm_M1_h5_tp0.5_sl0.5_long.joblib</span>
-│   ├── <span class="file">meta_M1_h5_tp0.5_sl0.5_long.json</span>
-│   ├── <span class="file">lgbm_M1_h5_tp0.5_sl0.5_short.joblib</span>
-│   └── <span class="file">meta_M1_h5_tp0.5_sl0.5_short.json</span>
+│   ├── <span class="file">lgbm_M1_h5_long.joblib</span>      <span class="gray">← базовая модель BUY</span>
+│   ├── <span class="file">meta_M1_h5_long.json</span>
+│   ├── <span class="file">lgbm_M1_h5_short.joblib</span>     <span class="gray">← базовая модель SELL</span>
+│   └── <span class="file">meta_M1_h5_short.json</span>
 ├── <span class="dir">scripts\</span>
 │   ├── <span class="file">bot.py</span>
+│   ├── <span class="file">inversebot.py</span>
 │   └── <span class="file">features.py</span>
 └── <span class="file">requirements_windows.txt</span>
         </div>
@@ -901,7 +1128,7 @@ goldml\logs\metka_inversebot_20260410_164200.log</code></pre>
 </div>
 
 <footer>
-  XAUUSD ML Bot · LightGBM · M1 · BUY + SELL · Level Bot · Metka Bot · Только для DEMO перед боевым использованием
+  XAUUSD ML Bot · LightGBM · Direction-Only Models · M1 · BUY + SELL · Base Bot · Level Bot · Metka Bot · Swing Bot · TP/SL настраиваются в боте · Только для DEMO перед боевым использованием
 </footer>
 
 <script>

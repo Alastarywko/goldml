@@ -1,10 +1,18 @@
 """
-Обучает LightGBM на dataset_*.parquet, сохраняет модель и метрики.
+Обучение базовой модели — предсказывает НАПРАВЛЕНИЕ движения за N минут.
+TP/SL не фиксированы в метке — ставишь любые при запуске бота.
 
 Запуск:
-    python src/train.py                          # лонг (по умолчанию)
-    python src/train.py --direction short        # шорт
-    python src/train.py --tf M1 --horizon 5 --tp 0.5 --sl 0.5 --test-years 2
+    python src/train.py --direction long
+    python src/train.py --direction short
+
+Результат:
+    models/lgbm_M1_h5_long.joblib
+    models/meta_M1_h5_long.json
+
+Запуск бота (любые TP/SL):
+    python scripts/bot.py --tp-points 50 --sl-points 50
+    python scripts/bot.py --tp-points 100 --sl-points 50
 """
 
 import argparse
@@ -15,130 +23,151 @@ import joblib
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
-from sklearn.metrics import (
-    classification_report,
-    roc_auc_score,
-    accuracy_score,
-)
+from sklearn.metrics import classification_report, roc_auc_score
 
 ROOT = Path(__file__).resolve().parent.parent
-DATA_DIR = ROOT / "data"
+DATA_DIR   = ROOT / "data"
 MODELS_DIR = ROOT / "models"
 MODELS_DIR.mkdir(exist_ok=True)
 
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
-    p.add_argument("--tf", default="M1")
-    p.add_argument("--horizon", type=int, default=5)
-    p.add_argument("--tp", type=float, default=0.5)
-    p.add_argument("--sl", type=float, default=0.5)
-    p.add_argument("--test-years", type=float, default=2.0,
-                   help="Сколько последних лет оставить на тест (default 2)")
-    p.add_argument("--direction", default="long", choices=["long", "short"],
-                   help="Направление: long или short")
+    p.add_argument("--tf",        default="M1")
+    p.add_argument("--horizon",   type=int,   default=5)
+    p.add_argument("--direction", default="long", choices=["long", "short"])
+    p.add_argument("--threshold", type=float, default=0.55)
     return p.parse_args()
 
 
-FEATURE_COLS_EXCLUDE = {"open", "high", "low", "close", "volume", "label"}
+EXCLUDE = {"open", "high", "low", "close", "volume", "label"}
 
 
-def main() -> None:
-    args = parse_args()
+def load_dataset(args: argparse.Namespace) -> pd.DataFrame:
+    fname = f"dataset_{args.tf}_h{args.horizon}_{args.direction}.parquet"
+    path  = DATA_DIR / fname
+    if not path.is_file():
+        print(f"[!] Файл не найден: {path}")
+        print("    Сначала запустите: python src/make_features.py "
+              f"--direction {args.direction} --horizon {args.horizon}")
+        import sys; sys.exit(1)
+    print(f"Читаем {path} ...")
+    return pd.read_parquet(path)
 
-    src = DATA_DIR / f"dataset_{args.tf}_h{args.horizon}_tp{args.tp}_sl{args.sl}_{args.direction}.parquet"
-    if not src.is_file():
-        raise FileNotFoundError(
-            f"Нет датасета: {src}\n"
-            f"Запустите сначала: python src/make_features.py --direction {args.direction}"
-        )
 
-    print(f"Читаем {src} ...")
-    df = pd.read_parquet(src)
+def time_split(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    dates = df.index.normalize().unique().sort_values()
+    split = dates[int(len(dates) * 0.66)]
+    train = df[df.index < split]
+    test  = df[df.index >= split]
+    print(f"Train: {train.index[0]} → {train.index[-1]} ({len(train):,} строк)")
+    print(f"Test : {test.index[0]}  → {test.index[-1]}  ({len(test):,} строк)")
+    return train, test
 
-    feature_cols = [c for c in df.columns if c not in FEATURE_COLS_EXCLUDE]
-    X = df[feature_cols]
-    y = df["label"]
 
-    # ── Разбивка train/test ПО ВРЕМЕНИ (не random, иначе утечка из будущего)
-    cutoff = df.index.max() - pd.DateOffset(years=args.test_years)
-    train_mask = df.index <= cutoff
-    test_mask = df.index > cutoff
-
-    X_train, y_train = X[train_mask], y[train_mask]
-    X_test, y_test = X[test_mask], y[test_mask]
-
-    print(f"\nРазбивка по времени:")
-    print(f"  Train: {df.index[train_mask].min()} → {df.index[train_mask].max()}  ({train_mask.sum():,} строк)")
-    print(f"  Test:  {df.index[test_mask].min()} → {df.index[test_mask].max()}  ({test_mask.sum():,} строк)")
-
-    # ── Обучение LightGBM
-    print("\nОбучаем LightGBM ...")
+def train_model(X_train: pd.DataFrame, y_train: pd.Series) -> lgb.LGBMClassifier:
     model = lgb.LGBMClassifier(
-        n_estimators=500,
-        learning_rate=0.05,
+        n_estimators=600,
+        learning_rate=0.04,
         num_leaves=63,
         max_depth=-1,
-        min_child_samples=200,
+        min_child_samples=150,
         subsample=0.8,
         colsample_bytree=0.8,
-        reg_alpha=0.1,
-        reg_lambda=1.0,
-        class_weight="balanced",
         random_state=42,
         n_jobs=-1,
         verbose=-1,
     )
+    model.fit(X_train, y_train)
+    return model
 
-    model.fit(
-        X_train, y_train,
-        eval_set=[(X_test, y_test)],
-        callbacks=[lgb.early_stopping(50, verbose=False), lgb.log_evaluation(100)],
-    )
 
-    # ── Метрики
-    y_pred = model.predict(X_test)
-    y_prob = model.predict_proba(X_test)[:, 1]
+def evaluate(model: lgb.LGBMClassifier, X_test: pd.DataFrame,
+             y_test: pd.Series, args: argparse.Namespace) -> tuple[float, np.ndarray]:
+    prob = model.predict_proba(X_test)[:, 1]
+    auc  = roc_auc_score(y_test, prob)
+    pred = (prob >= 0.5).astype(int)
 
-    acc = accuracy_score(y_test, y_pred)
-    roc = roc_auc_score(y_test, y_prob)
+    print("=" * 55)
+    print(f"Accuracy   : {(pred == y_test).mean():.4f}")
+    print(f"ROC-AUC    : {auc:.4f}")
+    print("=" * 55)
+    print(classification_report(y_test, pred,
+                                target_names=["вниз (0)", "вверх (1)"]))
 
-    print("\n" + "=" * 50)
-    print(f"  Accuracy : {acc:.4f}")
-    print(f"  ROC-AUC  : {roc:.4f}")
-    print("=" * 50)
-    print("\nClassification report:")
-    print(classification_report(y_test, y_pred, target_names=["нет сигнала", "лонг"]))
+    days = max((X_test.index[-1] - X_test.index[0]).days, 1)
 
-    # ── Важность признаков (топ-15)
-    fi = pd.Series(model.feature_importances_, index=feature_cols).sort_values(ascending=False)
-    print("Топ-15 важных признаков:")
-    print(fi.head(15).to_string())
+    print(f"\n{'Порог':>6} | {'Сигналов':>9} | {'~в день':>7} | {'Winrate':>8} |"
+          f"  PnL/сделку (TP/SL пункты)")
+    print("-" * 78)
+    for thr in [0.50, 0.55, 0.60, 0.62, 0.65, 0.68, 0.70]:
+        mask = prob >= thr
+        n    = mask.sum()
+        if n == 0:
+            continue
+        wr      = y_test[mask].mean()
+        per_day = n / days
+        pnl_50_50  = wr * 50  - (1 - wr) * 50
+        pnl_100_50 = wr * 100 - (1 - wr) * 50
+        pnl_50_30  = wr * 50  - (1 - wr) * 30
+        print(f"{thr:>6.2f} | {n:>9,} | {per_day:>7.1f} | {wr*100:>8.1f}% |"
+              f"  50/50: {pnl_50_50:+.1f}п  "
+              f"100/50: {pnl_100_50:+.1f}п  "
+              f"50/30: {pnl_50_30:+.1f}п")
+    print()
+    return auc, prob
 
-    # ── Сохранение
-    tag = f"{args.tf}_h{args.horizon}_tp{args.tp}_sl{args.sl}_{args.direction}"
-    model_path = MODELS_DIR / f"lgbm_{tag}.joblib"
-    meta_path = MODELS_DIR / f"meta_{tag}.json"
 
-    joblib.dump(model, model_path)
+def save_model(model: lgb.LGBMClassifier, auc: float,
+               feature_cols: list[str], args: argparse.Namespace) -> None:
+    tag   = f"M1_h{args.horizon}_{args.direction}"
+    mpath = MODELS_DIR / f"lgbm_{tag}.joblib"
+    jpath = MODELS_DIR / f"meta_{tag}.json"
+
+    joblib.dump(model, mpath)
     meta = {
-        "tf": args.tf,
-        "horizon": args.horizon,
-        "tp": args.tp,
-        "sl": args.sl,
-        "direction": args.direction,
+        "tag":          tag,
+        "direction":    args.direction,
+        "horizon":      args.horizon,
+        "label_type":   "direction",
+        "roc_auc":      round(auc, 4),
         "feature_cols": feature_cols,
-        "test_cutoff": str(cutoff.date()),
-        "accuracy": round(acc, 4),
-        "roc_auc": round(roc, 4),
-        "train_rows": int(train_mask.sum()),
-        "test_rows": int(test_mask.sum()),
+        "model_type":   "base",
     }
-    with open(meta_path, "w") as f:
-        json.dump(meta, f, indent=2)
+    with open(jpath, "w") as f:
+        json.dump(meta, f, ensure_ascii=False, indent=2)
 
-    print(f"\nМодель сохранена : {model_path}")
-    print(f"Метаданные       : {meta_path}")
+    print(f"Модель : {mpath}")
+    print(f"Мета   : {jpath}")
+    print(f"\nЗапуск бота (примеры):")
+    print(f"  python scripts\\bot.py --tp-points 50 --sl-points 50")
+    print(f"  python scripts\\bot.py --tp-points 100 --sl-points 50")
+
+
+def main() -> None:
+    args = parse_args()
+    df   = load_dataset(args)
+
+    train_df, test_df = time_split(df)
+    feature_cols = [c for c in df.columns if c not in EXCLUDE]
+
+    X_train = train_df[feature_cols]
+    y_train = train_df["label"]
+    X_test  = test_df[feature_cols]
+    y_test  = test_df["label"]
+
+    print(f"\nОбучаем LightGBM (base, direction={args.direction}, "
+          f"horizon={args.horizon} баров)")
+    model = train_model(X_train, y_train)
+    auc, _ = evaluate(model, X_test, y_test, args)
+
+    fi = sorted(zip(feature_cols, model.feature_importances_),
+                key=lambda x: x[1], reverse=True)
+    print("Топ-15 важных признаков:")
+    for name, val in fi[:15]:
+        print(f"  {name:<30} {val}")
+
+    save_model(model, auc, feature_cols, args)
 
 
 if __name__ == "__main__":

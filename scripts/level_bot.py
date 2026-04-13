@@ -234,12 +234,12 @@ def run(args: argparse.Namespace) -> None:
         Path(args.models_dir) if args.models_dir
         else Path(__file__).resolve().parent.parent / "models"
     )
-    tag_long  = "M1_h3_tp0.3_sl0.3_long"
-    tag_short = "M1_h3_tp0.3_sl0.3_short"
+    tag_long  = "M1_h3_long"
+    tag_short = "M1_h3_short"
 
     model_long, meta_long = load_level_model(models_dir, tag_long)
     feature_cols = meta_long["feature_cols"]
-    log.info(f"Модель LONG  загружена: level_{tag_long}   ROC-AUC={meta_long['roc_auc']}")
+    log.info(f"Модель LONG  загружена: level_{tag_long}  ROC-AUC={meta_long['roc_auc']}")
 
     model_short = None
     try:
