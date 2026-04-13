@@ -108,6 +108,7 @@
     .ubuntu .step-num  { background: #2d3748; color: #fc8181; border: 2px solid #fc8181; }
     .windows .step-num { background: #2d3748; color: #90cdf4; border: 2px solid #4299e1; }
     .levels .step-num  { background: #2d3748; color: #68d391; border: 2px solid #38a169; }
+    .metka  .step-num  { background: #2d3748; color: #d6bcfa; border: 2px solid #805ad5; }
 
     .step-body { flex: 1; }
 
@@ -119,6 +120,7 @@
     .ubuntu  .step-body h3 { color: #fc8181; }
     .windows .step-body h3 { color: #90cdf4; }
     .levels  .step-body h3 { color: #68d391; }
+    .metka   .step-body h3 { color: #d6bcfa; }
 
     .step-body p { color: #a0aec0; margin-bottom: 10px; font-size: 0.93rem; }
 
@@ -223,6 +225,7 @@
     <span class="badge badge-green">LightGBM · ROC-AUC 0.63</span>
     <span class="badge badge-blue">M1 · BUY + SELL</span>
     <span class="badge badge-green">Level Bot · Уровни</span>
+    <span class="badge" style="background:#3b1f6e;color:#d6bcfa;">Metka Bot · Паттерны</span>
   </div>
 </header>
 
@@ -232,6 +235,7 @@
     <button class="tab-btn active" onclick="switchTab('ubuntu', this)">🐧 Ubuntu — Обучение</button>
     <button class="tab-btn" onclick="switchTab('windows', this)">🪟 Windows — Торговля</button>
     <button class="tab-btn" onclick="switchTab('levels', this)">📐 Level Bot — Уровни</button>
+    <button class="tab-btn" onclick="switchTab('metka', this)">🎯 Metka Bot — Паттерны</button>
   </div>
 
   <!-- ══════════════════════════════════════════ UBUNTU ══ -->
@@ -562,6 +566,214 @@ goldml\logs\level_inversebot_20260410_164200.log</code></pre>
 
   </div>
 
+  <!-- ══════════════════════════════════════════ METKA ══ -->
+  <div id="metka" class="tab-content metka">
+
+    <div class="note" style="margin-bottom:28px; font-size:0.93rem;">
+      <strong>Metka Bot</strong> — бот на основе логики индикатора <code>metka.mq5</code>.
+      Торгует по тем же паттернам что рисует индикатор на графике (пин-бар, разворот импульса,
+      squeeze breakout, RSI-дивергенция). По умолчанию — <strong>чистые сигналы Метки</strong>,
+      без ML. Опционально: <code>--use-model</code> добавляет ML-фильтр,
+      который отсеивает потенциально убыточные (чёрные) метки.
+    </div>
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h3>Паттерны Метки (дефолтные настройки)</h3>
+        <p>Бот вычисляет те же сигналы что индикатор Metka v28 с параметрами по умолчанию. Выключены: объём, ADX, Bollinger. Включены: Swing-фильтр.</p>
+        <table>
+          <tr><th>Паттерн</th><th>Условие BUY</th><th>Признак</th></tr>
+          <tr><td>Пин-бар</td><td>Нижняя тень &gt;50% диапазона, диапазон &gt;2×ATR, закрытие выше середины</td><td><code>pin_bar_buy</code></td></tr>
+          <tr><td>Разворот импульса</td><td>≥3 медвежьих баров подряд + сильный бычий бар (тело &gt;ATR×0.3)</td><td><code>momentum_rev_buy</code></td></tr>
+          <tr><td>Squeeze Breakout</td><td>Сжатие диапазона (&lt;0.5 ATR) + пробой вверх + EMA21 &gt; EMA50</td><td><code>squeeze_break_buy</code></td></tr>
+          <tr><td>RSI Дивергенция</td><td>Цена у нового минимума, RSI выше предыдущего минимума на 3+</td><td><code>rsi_div_buy</code></td></tr>
+        </table>
+        <p>Все паттерны дополнительно проходят <strong>Swing-фильтр</strong>: BUY только если цена у локального минимума (окно 15 баров, допуск 1.5 ATR).</p>
+        <p>Итоговый сигнал: <code>metka_buy / metka_sell</code> — любой паттерн + swing-фильтр.</p>
+        <p><code>metka_buy_strength</code> — сколько паттернов сработало одновременно (0–4). Чем выше, тем сильнее сигнал.</p>
+        <div class="note">
+          EMA Fast=21, EMA Slow=50 — настраиваются в UI Metka (<code>input</code>-параметры).<br>
+          ATR=20, RSI=14 — жёстко зашиты в код Metka как внутренние константы (не видны в настройках индикатора).
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h3>Два режима торговли</h3>
+        <table>
+          <tr><th>Режим</th><th>Запуск</th><th>Описание</th></tr>
+          <tr><td><strong>Чистая Метка</strong></td><td><code>python metka_bot.py</code></td><td>Открывает на каждый сигнал Метки. ML не нужна. Торгует как индикатор.</td></tr>
+          <tr><td><strong>Метка + ML</strong></td><td><code>python metka_bot.py --use-model</code></td><td>ML-модель оценивает вероятность прибыли. Открывает только "синие" метки (&gt;= порога). Требует обученной модели.</td></tr>
+        </table>
+        <div class="note">
+          <strong>Чистая Метка:</strong> модели <code>metka_lgbm_*.joblib</code> не нужны — бот запускается сразу.<br>
+          <strong>Метка + ML:</strong> сначала обучите модели на Ubuntu (шаги 4–6).
+        </div>
+      </div>
+    </div>
+
+    <hr class="divider">
+    <p style="color:#d6bcfa; font-weight:600; font-size:1rem; margin-bottom:20px;">🪟 Windows — чистая Метка (без ML)</p>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h3>Файлы для Windows (чистая Метка — без ML)</h3>
+        <p>Модели не нужны — только скрипты:</p>
+        <div class="file-tree">
+<span class="dir">C:\...\goldml\scripts\</span>
+├── <span class="file">metka_bot.py</span>
+├── <span class="file">metka_inversebot.py</span>
+└── <span class="file">metka_features.py</span>     <span class="gray">← обязательно, без него не запустится</span>
+        </div>
+        <div class="warn">Папку <code>data/</code> и папку <code>models/</code> передавать не нужно — данные берутся из MT5 в реальном времени.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <h3>Запуск (чистая Метка)</h3>
+        <pre><code><span class="cmd">cd C:\...\goldml</span>
+<span class="cmd">.venv\Scripts\activate</span>
+
+<span class="comment"># DRY-RUN — наблюдение без ордеров:</span>
+<span class="cmd">python scripts\metka_bot.py --dry-run</span>
+
+<span class="comment"># Боевой запуск (DEMO):</span>
+<span class="cmd">python scripts\metka_bot.py --lot 0.1 --tp-points 50 --sl-points 50</span></code></pre>
+        <p>Пример вывода:</p>
+        <pre><code>[2026-04-10 16:41]  цена=3287.50  позиций: 0  [pin_bar_buy | STRONG]
+[2026-04-10 16:41]  цена=3287.50  позиций: 0  <span class="kw">&gt;&gt;&gt; BUY &lt;&lt;&lt;</span>  [pin_bar_buy | STRONG  str=1/0]
+[DRY-RUN] BUY 0.10 @ 3287.50  SL=3287.00  TP=3288.00</code></pre>
+        <p>В скобках: какие паттерны сработали на этом баре. <code>str=1/0</code> — 1 паттерн BUY, 0 SELL.</p>
+      </div>
+    </div>
+
+    <hr class="divider">
+    <p style="color:#d6bcfa; font-weight:600; font-size:1rem; margin-bottom:20px;">🐧 Ubuntu — обучение ML-фильтра (опционально)</p>
+
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <h3>Построить датасет с Metka-признаками</h3>
+        <p>Метка для обучения: 1 (синяя) если цена достигла TP за 5 баров без SL; 0 (чёрная) иначе.</p>
+        <pre><code><span class="cmd">cd ~/projects/gold-ml</span>
+<span class="cmd">source .venv/bin/activate</span>
+<span class="cmd">python src/make_features_metka.py --direction long</span>
+<span class="cmd">python src/make_features_metka.py --direction short</span></code></pre>
+        <p>Результат в <code>data/</code>:</p>
+        <div class="file-tree">
+<span class="file">dataset_metka_M1_h5_tp0.5_sl0.5_long.parquet</span>
+<span class="file">dataset_metka_M1_h5_tp0.5_sl0.5_short.parquet</span>
+        </div>
+        <p>Скрипт выводит сколько Metka-баров (BUY/SELL) найдено в истории — это показывает реальную частоту сигналов.</p>
+        <table>
+          <tr><th>Параметр</th><th>По умолчанию</th><th>Описание</th></tr>
+          <tr><td>--horizon</td><td>5</td><td>Баров вперёд для оценки исхода</td></tr>
+          <tr><td>--tp</td><td>0.5</td><td>Тейк-профит $0.50</td></tr>
+          <tr><td>--sl</td><td>0.5</td><td>Стоп-лосс $0.50</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <h3>Обучить ML-фильтр</h3>
+        <pre><code><span class="cmd">python src/train_metka.py --direction long</span>
+<span class="cmd">python src/train_metka.py --direction short</span></code></pre>
+        <p>Результат в <code>models/</code>:</p>
+        <div class="file-tree">
+<span class="file">metka_lgbm_M1_h5_tp0.5_sl0.5_long.joblib</span>
+<span class="file">metka_meta_M1_h5_tp0.5_sl0.5_long.json</span>
+<span class="file">metka_lgbm_M1_h5_tp0.5_sl0.5_short.joblib</span>
+<span class="file">metka_meta_M1_h5_tp0.5_sl0.5_short.json</span>
+        </div>
+        <p>После обучения выводится таблица по порогам: winrate и средний PnL/сделку для Metka-баров отдельно и всех баров вместе. Рекомендуемый порог: <strong>0.62–0.65</strong>.</p>
+        <div class="note">
+          Модель видит: паттерн Метки (пин-бар? squeeze?), RSI, ATR, час, день недели и ~50 других признаков.
+          Учится отличать "синие" метки от "чёрных" по контексту.
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">7</div>
+      <div class="step-body">
+        <h3>Файлы для Windows (Метка + ML)</h3>
+        <div class="file-tree">
+<span class="dir">models\</span>
+├── <span class="file">metka_lgbm_M1_h5_tp0.5_sl0.5_long.joblib</span>
+├── <span class="file">metka_meta_M1_h5_tp0.5_sl0.5_long.json</span>
+├── <span class="file">metka_lgbm_M1_h5_tp0.5_sl0.5_short.joblib</span>
+└── <span class="file">metka_meta_M1_h5_tp0.5_sl0.5_short.json</span>
+<span class="dir">scripts\</span>
+├── <span class="file">metka_bot.py</span>
+├── <span class="file">metka_inversebot.py</span>
+└── <span class="file">metka_features.py</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">8</div>
+      <div class="step-body">
+        <h3>Запуск с ML-фильтром</h3>
+        <pre><code><span class="comment"># DRY-RUN с ML-фильтром:</span>
+<span class="cmd">python scripts\metka_bot.py --use-model --dry-run</span>
+
+<span class="comment"># Боевой (DEMO) с ML-фильтром, порог 0.65:</span>
+<span class="cmd">python scripts\metka_bot.py --use-model --threshold 0.65 --lot 0.1 --tp-points 50 --sl-points 50</span></code></pre>
+        <p>Пример вывода с ML-фильтром (метка есть, но ML блокирует):</p>
+        <pre><code>[2026-04-10 03:12]  цена=3241.20  позиций: 0  (Metka есть, ML блокирует)  [pin_bar_buy  ML: long=0.481 short=0.210]
+[2026-04-10 14:35]  цена=3287.50  позиций: 0  <span class="kw">&gt;&gt;&gt; BUY &lt;&lt;&lt;</span>  [pin_bar_buy | STRONG  ML: long=0.713 short=0.198]
+[DRY-RUN] BUY 0.10 @ 3287.50  SL=3287.00  TP=3288.00</code></pre>
+        <p>В 03:12 — пин-бар есть, но ML даёт 48% → пропускаем. В 14:35 — тот же паттерн, ML даёт 71% → открываем.</p>
+        <table>
+          <tr><th>Параметр</th><th>По умолчанию</th><th>Описание</th></tr>
+          <tr><td>--use-model</td><td>выкл</td><td>Включить ML-фильтр (требует обученных моделей)</td></tr>
+          <tr><td>--threshold</td><td>0.62</td><td>Порог ML-фильтра (0.0–1.0). Только с --use-model</td></tr>
+          <tr><td>--lot</td><td>None</td><td>Фиксированный лот (отменяет --risk)</td></tr>
+          <tr><td>--risk</td><td>1.0</td><td>Риск на сделку, % от баланса</td></tr>
+          <tr><td>--tp-points</td><td>50</td><td>Тейк-профит в пунктах</td></tr>
+          <tr><td>--sl-points</td><td>50</td><td>Стоп-лосс в пунктах</td></tr>
+          <tr><td>--max-trades-day</td><td>50</td><td>Макс. сделок в день</td></tr>
+          <tr><td>--cooldown</td><td>60</td><td>Пауза между сделками (секунды)</td></tr>
+          <tr><td>--dry-run</td><td>выкл</td><td>Без реальных ордеров</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">9</div>
+      <div class="step-body">
+        <h3>Инверсный бот (metka_inversebot.py)</h3>
+        <p>Логика полностью обратна: BUY-сигнал Метки → открываем SELL, SELL → BUY. Поддерживает те же флаги.</p>
+        <pre><code><span class="comment"># Чистый инверс:</span>
+<span class="cmd">python scripts\metka_inversebot.py --dry-run --lot 0.1</span>
+
+<span class="comment"># Инверс с ML-фильтром:</span>
+<span class="cmd">python scripts\metka_inversebot.py --use-model --threshold 0.65 --dry-run</span></code></pre>
+        <div class="warn">Никогда не запускайте <code>metka_bot.py</code> и <code>metka_inversebot.py</code> одновременно — они откроют противоположные позиции и нейтрализуют друг друга.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">10</div>
+      <div class="step-body">
+        <h3>Логи</h3>
+        <pre><code>goldml\logs\metka_bot_20260410_164100.log
+goldml\logs\metka_inversebot_20260410_164200.log</code></pre>
+        <p>В логе каждую минуту: цена, активные паттерны, результат ML-фильтра (если включён), открытые позиции.</p>
+      </div>
+    </div>
+
+  </div>
+
   <!-- ══════════════════════════════════════════ WINDOWS ══ -->
   <div id="windows" class="tab-content windows">
 
@@ -689,7 +901,7 @@ goldml\logs\level_inversebot_20260410_164200.log</code></pre>
 </div>
 
 <footer>
-  XAUUSD ML Bot · LightGBM · M1 · BUY + SELL · Level Bot · Только для DEMO перед боевым использованием
+  XAUUSD ML Bot · LightGBM · M1 · BUY + SELL · Level Bot · Metka Bot · Только для DEMO перед боевым использованием
 </footer>
 
 <script>
