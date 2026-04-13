@@ -202,7 +202,7 @@ def run(args: argparse.Namespace) -> None:
                 time.sleep(60 - now.second + 2)
                 continue
 
-            df   = get_bars(mt5lib, args.symbol, n=MIN_BARS + 50)
+            df   = get_bars(mt5lib, args.symbol, n=250)
             df   = build_features(df)
             last = df.dropna().iloc[[-1]]
 
@@ -222,17 +222,20 @@ def run(args: argparse.Namespace) -> None:
             # Фильтр по тренду (инвертированный):
             # оригинальный бот покупает выше SMA200 → мы продаём выше SMA200
             # оригинальный бот продаёт ниже SMA200  → мы покупаем ниже SMA200
-            sma200     = df["close"].rolling(200).mean().iloc[-1]
-            price_now  = last["close"].iloc[-1]
-            trend_up   = price_now > sma200
-            trend_down = price_now < sma200
+            sma200    = df["close"].rolling(200).mean().iloc[-1]
+            price_now = last["close"].iloc[-1]
 
-            if signal_long and not trend_up:
-                log.info(f"  INVERSE SELL заблокирован — цена ниже SMA200 ({sma200:.2f})")
-                signal_long = False
-            if signal_short and not trend_down:
-                log.info(f"  INVERSE BUY заблокирован — цена выше SMA200 ({sma200:.2f})")
-                signal_short = False
+            if np.isnan(sma200):
+                log.warning("SMA200 = NaN (мало баров) — фильтр тренда отключён")
+            else:
+                trend_up   = price_now > sma200
+                trend_down = price_now < sma200
+                if signal_long and not trend_up:
+                    log.info(f"  INVERSE SELL заблокирован — цена ниже SMA200 ({sma200:.2f})")
+                    signal_long = False
+                if signal_short and not trend_down:
+                    log.info(f"  INVERSE BUY заблокирован — цена выше SMA200 ({sma200:.2f})")
+                    signal_short = False
 
             bar_time  = last.index[-1].strftime("%Y-%m-%d %H:%M")
             price     = last["close"].iloc[-1]

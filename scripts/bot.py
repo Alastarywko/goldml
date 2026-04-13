@@ -269,8 +269,8 @@ def run(args: argparse.Namespace) -> None:
                 time.sleep(wait)
                 continue
 
-            # Получаем свечи
-            df = get_bars(mt5lib, args.symbol, n=MIN_BARS + 50)
+            # Получаем свечи (250 = достаточно для SMA200 + запас)
+            df = get_bars(mt5lib, args.symbol, n=250)
 
             # Считаем признаки
             df = build_features(df)
@@ -292,15 +292,18 @@ def run(args: argparse.Namespace) -> None:
             # Фильтр по тренду: BUY только выше SMA200, SELL только ниже SMA200
             sma200 = df["close"].rolling(200).mean().iloc[-1]
             price_now = last["close"].iloc[-1]
-            trend_up   = price_now > sma200
-            trend_down = price_now < sma200
 
-            if signal_long and not trend_up:
-                log.info(f"  BUY заблокирован — цена ниже SMA200 ({sma200:.2f}), тренд вниз")
-                signal_long = False
-            if signal_short and not trend_down:
-                log.info(f"  SELL заблокирован — цена выше SMA200 ({sma200:.2f}), тренд вверх")
-                signal_short = False
+            if np.isnan(sma200):
+                log.warning("SMA200 = NaN (мало баров) — фильтр тренда отключён")
+            else:
+                trend_up   = price_now > sma200
+                trend_down = price_now < sma200
+                if signal_long and not trend_up:
+                    log.info(f"  BUY заблокирован — цена ниже SMA200 ({sma200:.2f}), тренд вниз")
+                    signal_long = False
+                if signal_short and not trend_down:
+                    log.info(f"  SELL заблокирован — цена выше SMA200 ({sma200:.2f}), тренд вверх")
+                    signal_short = False
 
             bar_time = last.index[-1].strftime("%Y-%m-%d %H:%M")
             price = last["close"].iloc[-1]
