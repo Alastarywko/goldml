@@ -107,6 +107,7 @@
     }
     .ubuntu .step-num  { background: #2d3748; color: #fc8181; border: 2px solid #fc8181; }
     .windows .step-num { background: #2d3748; color: #90cdf4; border: 2px solid #4299e1; }
+    .levels .step-num  { background: #2d3748; color: #68d391; border: 2px solid #38a169; }
 
     .step-body { flex: 1; }
 
@@ -117,6 +118,7 @@
     }
     .ubuntu  .step-body h3 { color: #fc8181; }
     .windows .step-body h3 { color: #90cdf4; }
+    .levels  .step-body h3 { color: #68d391; }
 
     .step-body p { color: #a0aec0; margin-bottom: 10px; font-size: 0.93rem; }
 
@@ -220,6 +222,7 @@
     <span class="badge badge-gold">XAUUSD / Gold</span>
     <span class="badge badge-green">LightGBM · ROC-AUC 0.63</span>
     <span class="badge badge-blue">M1 · BUY + SELL</span>
+    <span class="badge badge-green">Level Bot · Уровни</span>
   </div>
 </header>
 
@@ -228,6 +231,7 @@
   <div class="tabs">
     <button class="tab-btn active" onclick="switchTab('ubuntu', this)">🐧 Ubuntu — Обучение</button>
     <button class="tab-btn" onclick="switchTab('windows', this)">🪟 Windows — Торговля</button>
+    <button class="tab-btn" onclick="switchTab('levels', this)">📐 Level Bot — Уровни</button>
   </div>
 
   <!-- ══════════════════════════════════════════ UBUNTU ══ -->
@@ -369,6 +373,195 @@ df[df.index >= <span class="str">'2020-01-01'</span>].to_parquet(<span class="st
 
   </div>
 
+  <!-- ══════════════════════════════════════════ LEVELS ══ -->
+  <div id="levels" class="tab-content levels">
+
+    <div class="note" style="margin-bottom:28px; font-size:0.93rem;">
+      <strong>Level Bot</strong> — скальпинговая модель на коротких ценовых уровнях M1. Цель: до 10 сигналов в час.
+      Не требует SMA200, запрашивает всего 100 баров. Модели хранятся с префиксом <code>level_</code>.
+      Если вы обучали level-модели раньше — <strong>переобучите</strong>: признаки и параметры изменились.
+    </div>
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h3>Скальпинговые уровни — три горизонта на M1</h3>
+        <p>Вместо дневных уровней (1440 баров) используются короткие скользящие окна — локальные экстремумы последних 5, 15 и 30 минут.</p>
+        <table>
+          <tr><th>Горизонт</th><th>Окно (M1 баров)</th><th>Название признаков</th><th>Применение</th></tr>
+          <tr><td>micro</td><td>5 (5 мин)</td><td>dist_micro_*, near_micro_*, fakeout_*_micro</td><td>Быстрый ложный пробой</td></tr>
+          <tr><td>short</td><td>15 (15 мин)</td><td>dist_short_*, near_short_*, breakout_*_short</td><td>Основной отбой / пробой</td></tr>
+          <tr><td>medium</td><td>30 (30 мин)</td><td>dist_medium_*, near_medium_*</td><td>Контекст полчасового диапазона</td></tr>
+        </table>
+        <p>Дополнительно: <code>confluence_high / confluence_low</code> — сколько уровней одновременно совпадают (0–3). Чем выше, тем сильнее зона.</p>
+        <div class="note">Итого ~50 признаков (30 базовых + 20 уровневых). Бот запрашивает <strong>100 баров</strong>. SMA200 фильтр отключён — бот торгует в обе стороны без ограничений.</div>
+      </div>
+    </div>
+
+    <hr class="divider">
+    <p style="color:#68d391; font-weight:600; font-size:1rem; margin-bottom:20px;">🐧 Ubuntu — обучение level-моделей</p>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h3>Активировать venv</h3>
+        <pre><code><span class="cmd">cd ~/projects/gold-ml</span>
+<span class="cmd">source .venv/bin/activate</span></code></pre>
+        <div class="warn">⚠️ Убедитесь что M1 parquet уже создан (шаги 5–6 вкладки Ubuntu). Если нет — выполните их сначала.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h3>Построить датасеты с уровневыми признаками</h3>
+        <p>Параметры для скальпинга: горизонт <strong>3 бара (3 минуты)</strong>, тейк/стоп <strong>$0.30</strong>.</p>
+        <pre><code><span class="cmd">python src/make_features_levels.py --direction long</span>
+<span class="cmd">python src/make_features_levels.py --direction short</span></code></pre>
+        <p>Результат в папке <code>data/</code>:</p>
+        <div class="file-tree">
+<span class="file">dataset_levels_M1_h3_tp0.3_sl0.3_long.parquet</span>
+<span class="file">dataset_levels_M1_h3_tp0.3_sl0.3_short.parquet</span>
+        </div>
+        <div class="note">Занимает быстрее прежнего — rolling(30) вместо rolling(1440).</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <h3>Обучить level-модели</h3>
+        <pre><code><span class="cmd">python src/train_levels.py --direction long</span>
+<span class="cmd">python src/train_levels.py --direction short</span></code></pre>
+        <p>Разбивка по времени: первые 66% — обучение, последние 34% — тест (строго хронологически).</p>
+        <p>Результат в папке <code>models/</code>:</p>
+        <div class="file-tree">
+<span class="file">level_lgbm_M1_h3_tp0.3_sl0.3_long.joblib</span>
+<span class="file">level_meta_M1_h3_tp0.3_sl0.3_long.json</span>
+<span class="file">level_lgbm_M1_h3_tp0.3_sl0.3_short.joblib</span>
+<span class="file">level_meta_M1_h3_tp0.3_sl0.3_short.json</span>
+        </div>
+        <div class="note">Обучение выводит таблицу порогов с Winrate и Profit Factor. Для скальпинга рекомендуем порог <strong>0.60</strong> — больше сигналов при приемлемой точности.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <h3>Файлы для передачи на Windows</h3>
+        <div class="file-tree">
+<span class="dir">models\</span>
+├── <span class="file">level_lgbm_M1_h3_tp0.3_sl0.3_long.joblib</span>
+├── <span class="file">level_meta_M1_h3_tp0.3_sl0.3_long.json</span>
+├── <span class="file">level_lgbm_M1_h3_tp0.3_sl0.3_short.joblib</span>
+└── <span class="file">level_meta_M1_h3_tp0.3_sl0.3_short.json</span>
+<span class="dir">scripts\</span>
+├── <span class="file">level_bot.py</span>
+├── <span class="file">level_inversebot.py</span>
+└── <span class="file">level_features.py</span>     <span class="gray">← обязательно, без него не запустится</span>
+        </div>
+        <div class="warn">Папку <code>data/</code> передавать не нужно. Данные бот берёт из MT5 в реальном времени.</div>
+      </div>
+    </div>
+
+    <hr class="divider">
+    <p style="color:#68d391; font-weight:600; font-size:1rem; margin-bottom:20px;">🪟 Windows — запуск level-бота</p>
+
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <h3>Активировать venv</h3>
+        <div class="warn">⚠️ Перед каждым запуском бота активируйте виртуальное окружение:<br><br>
+          <code>.venv\Scripts\activate</code><br><br>
+          В начале строки должно появиться <code>(.venv)</code>
+        </div>
+        <pre><code><span class="cmd">cd C:\...\goldml</span>
+<span class="cmd">.venv\Scripts\activate</span></code></pre>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">7</div>
+      <div class="step-body">
+        <h3>DRY-RUN (наблюдение без ордеров)</h3>
+        <pre><code><span class="cmd">python scripts\level_bot.py --dry-run</span>
+<span class="comment"># С явными параметрами:</span>
+<span class="cmd">python scripts\level_bot.py --dry-run --lot 1 --threshold 0.60 --tp-points 30 --sl-points 30</span></code></pre>
+        <p>Пример вывода (бот запрашивает 100 баров, фильтр SMA200 отключён):</p>
+        <pre><code>[2026-04-10 16:41]  цена=3287.50  long=0.612  short=0.341  позиций: 0  [near_short_low=1  bounce_buy=1]
+[2026-04-10 16:42]  цена=3288.10  long=0.631  short=0.312  позиций: 0  <span class="kw">&gt;&gt;&gt; BUY &lt;&lt;&lt;</span>  [near_short_low=1  bounce_buy=1  confluence_low=2.00]
+[DRY-RUN] BUY 1.00 лот @ 3288.10  SL=3287.80  TP=3288.40</code></pre>
+        <p>В квадратных скобках — активные уровневые флаги. <code>confluence_low=2</code> означает что два уровня совпали — сильная зона.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">8</div>
+      <div class="step-body">
+        <h3>Боевой запуск (DEMO)</h3>
+        <pre><code><span class="comment"># Фиксированный лот, скальпинговые TP/SL</span>
+<span class="cmd">python scripts\level_bot.py --lot 1 --threshold 0.60 --tp-points 30 --sl-points 30</span>
+
+<span class="comment"># Управление рисками по балансу</span>
+<span class="cmd">python scripts\level_bot.py --risk 1.0 --tp-points 30 --sl-points 30</span>
+
+<span class="comment"># С ограничением сделок</span>
+<span class="cmd">python scripts\level_bot.py --lot 1 --threshold 0.60 --max-trades-day 50 --cooldown 30</span></code></pre>
+        <table>
+          <tr><th>Параметр</th><th>По умолчанию</th><th>Описание</th></tr>
+          <tr><td>--threshold</td><td>0.65</td><td>Порог вероятности. Для скальпинга рекомендуем 0.60</td></tr>
+          <tr><td>--lot</td><td>None</td><td>Фиксированный лот (отменяет --risk)</td></tr>
+          <tr><td>--risk</td><td>1.0</td><td>Риск на сделку, % от баланса</td></tr>
+          <tr><td>--tp-points</td><td>100</td><td>Тейк-профит в пунктах. Для скальпинга: 30 (=$0.30)</td></tr>
+          <tr><td>--sl-points</td><td>50</td><td>Стоп-лосс в пунктах. Для скальпинга: 30 (=$0.30)</td></tr>
+          <tr><td>--max-trades-day</td><td>1000</td><td>Макс. сделок в день</td></tr>
+          <tr><td>--cooldown</td><td>30</td><td>Пауза между сделками (секунды)</td></tr>
+          <tr><td>--dry-run</td><td>выкл</td><td>Без реальных ордеров</td></tr>
+        </table>
+        <div class="note">
+          SMA200 фильтр отсутствует — бот торгует BUY и SELL в любом направлении рынка.<br>
+          Для 1 лота XAUUSD: 30 пунктов = $0.30 TP/SL (1 пункт = $0.01).
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">9</div>
+      <div class="step-body">
+        <h3>Инверсный бот (level_inversebot.py)</h3>
+        <p>Логика полностью обратна: LONG-сигнал → SELL, SHORT-сигнал → BUY. SMA200 также отсутствует.</p>
+        <pre><code><span class="cmd">python scripts\level_inversebot.py --dry-run --lot 1</span>
+<span class="cmd">python scripts\level_inversebot.py --lot 1 --threshold 0.60 --tp-points 30 --sl-points 30</span></code></pre>
+        <div class="warn">Никогда не запускайте <code>level_bot.py</code> и <code>level_inversebot.py</code> одновременно — они откроют противоположные позиции и нейтрализуют друг друга.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">10</div>
+      <div class="step-body">
+        <h3>Три стратегии которые видит модель</h3>
+        <table>
+          <tr><th>Стратегия</th><th>Признаки</th><th>Логика</th></tr>
+          <tr><td>Отбой (Bounce)</td><td>near_short_low/high, rsi_7, vol_norm</td><td>Цена у 15-мин уровня + RSI &lt;38 или &gt;62 + объём слабый → разворот</td></tr>
+          <tr><td>Пробой (Breakout)</td><td>breakout_up/down_short, macd_hist, atr_7</td><td>Закрытие за 15-мин уровнем + объём 1.2× + ATR растёт → импульс</td></tr>
+          <tr><td>Ложный пробой (Fakeout)</td><td>fakeout_up/down_micro, rsi_7</td><td>Прокол 5-мин уровня за 2 бара + возврат + RSI &gt;68 или &lt;32 → ловушка</td></tr>
+        </table>
+        <p style="color:#a0aec0; font-size:0.88rem; margin-top:10px;">Важность признаков видна в выводе <code>train_levels.py</code> после обучения.</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">11</div>
+      <div class="step-body">
+        <h3>Логи</h3>
+        <p>Каждый запуск создаёт отдельный файл:</p>
+        <pre><code>goldml\logs\level_bot_20260410_164100.log
+goldml\logs\level_inversebot_20260410_164200.log</code></pre>
+      </div>
+    </div>
+
+  </div>
+
   <!-- ══════════════════════════════════════════ WINDOWS ══ -->
   <div id="windows" class="tab-content windows">
 
@@ -496,7 +689,7 @@ df[df.index >= <span class="str">'2020-01-01'</span>].to_parquet(<span class="st
 </div>
 
 <footer>
-  XAUUSD ML Bot · LightGBM · M1 · BUY + SELL · Только для DEMO перед боевым использованием
+  XAUUSD ML Bot · LightGBM · M1 · BUY + SELL · Level Bot · Только для DEMO перед боевым использованием
 </footer>
 
 <script>
