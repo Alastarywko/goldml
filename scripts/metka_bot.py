@@ -212,8 +212,10 @@ def metka_context(row: pd.Series, prob_long: float = None, prob_short: float = N
     if strength_b or strength_s:
         patterns.append(f"str={strength_b}/{strength_s}")
     parts = ["[" + " | ".join(patterns) + "]"] if patterns else []
-    if prob_long is not None:
-        parts.append(f"ML: long={prob_long:.3f} short={prob_short:.3f}")
+    if prob_long is not None or prob_short is not None:
+        pl = f"{prob_long:.3f}" if prob_long is not None else "n/a"
+        ps = f"{prob_short:.3f}" if prob_short is not None else "n/a"
+        parts.append(f"ML: long={pl} short={ps}")
     return "  " + "  ".join(parts) if parts else ""
 
 
@@ -326,14 +328,29 @@ def run(args: argparse.Namespace) -> None:
                             signal_short = prob_short >= args.threshold
 
             # ── Лог
-            bar_time   = last.index[-1].strftime("%Y-%m-%d %H:%M")
-            positions  = mt5lib.positions_get(symbol=args.symbol)
-            pos_info   = f"позиций: {len(positions)}" if positions else "позиций: 0"
-            mk_ctx     = metka_context(last_row, prob_long, prob_short)
-            signal_str = ("  >>> BUY <<<" if signal_long
-                          else "  >>> SELL <<<" if signal_short
-                          else ("  (Metka есть, ML блокирует)" if (raw_buy or raw_sell) and use_model
-                                else ""))
+            bar_time  = last.index[-1].strftime("%Y-%m-%d %H:%M")
+            positions = mt5lib.positions_get(symbol=args.symbol)
+            pos_info  = f"позиций: {len(positions)}" if positions else "позиций: 0"
+            mk_ctx    = metka_context(last_row, prob_long, prob_short)
+
+            if signal_long:
+                signal_str = "  >>> BUY <<<"
+            elif signal_short:
+                signal_str = "  >>> SELL <<<"
+            elif raw_buy and use_model and prob_long is not None:
+                signal_str = f"  (BUY заблокирован ML: {prob_long:.3f} < {args.threshold})"
+            elif raw_sell and use_model and prob_short is not None:
+                signal_str = f"  (SELL заблокирован ML: {prob_short:.3f} < {args.threshold})"
+            elif raw_buy and use_model:
+                signal_str = "  (BUY: модель не загружена)"
+            elif raw_sell and use_model:
+                signal_str = "  (SELL: модель не загружена)"
+            elif raw_buy:
+                signal_str = "  (Metka BUY — без ML)"
+            elif raw_sell:
+                signal_str = "  (Metka SELL — без ML)"
+            else:
+                signal_str = ""
 
             log.info(
                 f"[{bar_time}]  цена={last_row['close']:.2f}"
@@ -343,13 +360,14 @@ def run(args: argparse.Namespace) -> None:
             # ── Торговля
             if has_open_position(mt5lib, args.symbol):
                 if signal_long or signal_short:
-                    log.info("Позиция уже открыта — пропускаем")
+                    log.info("  ↳ не открываем: позиция уже открыта")
             elif trades_today >= args.max_trades_day:
                 if signal_long or signal_short:
-                    log.info(f"Лимит сделок/день ({args.max_trades_day}) достигнут")
+                    log.info(f"  ↳ не открываем: лимит {args.max_trades_day} сделок/день достигнут")
             elif last_trade_time and (now - last_trade_time).seconds < args.cooldown:
                 if signal_long or signal_short:
-                    log.info(f"Cooldown — ждём {args.cooldown - (now - last_trade_time).seconds} сек")
+                    remaining = args.cooldown - (now - last_trade_time).seconds
+                    log.info(f"  ↳ не открываем: cooldown, осталось {remaining} сек")
             else:
                 lot = args.lot if args.lot is not None else \
                       calc_lot(mt5lib, args.symbol, exec_sl, args.risk)
