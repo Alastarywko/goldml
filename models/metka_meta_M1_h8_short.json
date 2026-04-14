@@ -3,7 +3,7 @@
   "direction": "short",
   "horizon": 8,
   "label_type": "direction",
-  "roc_auc": 0.6381,
+  "roc_auc": 0.7104,
   "feature_cols": [
     "sma_5",
     "dist_sma_5",

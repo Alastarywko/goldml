@@ -2,11 +2,11 @@
 Строит датасет для metka-бота.
 
 Обучение ТОЛЬКО на барах где сработал сигнал Метки (metka_buy / metka_sell).
-Модель отвечает на вопрос: «этот конкретный сигнал Метки — синий или чёрный?»
+Модель отвечает на вопрос: «дойдёт ли эта Metka до моего TP?»
 
-Метка (OR-условие за horizon баров):
-  long:  1 если high достиг close[i]+min_move  ИЛИ  close[i+horizon] > close[i]
-  short: 1 если low  достиг close[i]-min_move  ИЛИ  close[i+horizon] < close[i]
+Метка:
+  long:  1 если max(high[i+1..i+horizon]) >= close[i] + min_move
+  short: 1 если min(low[i+1..i+horizon])  <= close[i] - min_move
 
 Запуск:
     python src/make_features_metka.py --direction long
@@ -40,9 +40,12 @@ def parse_args() -> argparse.Namespace:
 def add_label(df: pd.DataFrame, horizon: int, direction: str,
               min_move: float = 0.80) -> pd.DataFrame:
     """
-    label = 1 если выполнено хотя бы одно из двух за horizon баров:
-      long:  high достиг entry+min_move  ИЛИ  close[i+horizon] > entry
-      short: low  достиг entry-min_move  ИЛИ  close[i+horizon] < entry
+    label = 1 если цена достигла min_move за horizon баров:
+      long:  max(high[i+1..i+horizon]) >= close[i] + min_move
+      short: min(low[i+1..i+horizon])  <= close[i] - min_move
+
+    Вопрос к модели: «дойдёт ли эта Metka до моего TP?»
+    Ожидаемый % label=1: ~30–40% (реальная сложность задачи).
     """
     close_vals = df["close"].values
     high_vals  = df["high"].values
@@ -51,19 +54,14 @@ def add_label(df: pd.DataFrame, horizon: int, direction: str,
     labels = np.full(n, np.nan)
 
     for i in range(n - horizon):
-        entry           = close_vals[i]
-        future_h        = high_vals[i+1 : i+horizon+1]
-        future_l        = low_vals[i+1  : i+horizon+1]
-        future_close    = close_vals[i+horizon]
+        entry    = close_vals[i]
+        future_h = high_vals[i+1 : i+horizon+1]
+        future_l = low_vals[i+1  : i+horizon+1]
 
         if direction == "long":
-            cond1 = future_h.max() >= entry + min_move
-            cond2 = future_close > entry
+            labels[i] = 1 if future_h.max() >= entry + min_move else 0
         else:
-            cond1 = future_l.min() <= entry - min_move
-            cond2 = future_close < entry
-
-        labels[i] = 1 if (cond1 or cond2) else 0
+            labels[i] = 1 if future_l.min() <= entry - min_move else 0
 
     df["label"] = labels
     df = df.dropna(subset=["label"])
