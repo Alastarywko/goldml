@@ -670,7 +670,7 @@ goldml\logs\level_inversebot_20260410_164200.log</code></pre>
 <span class="cmd">python scripts\metka_bot.py --dry-run</span>
 
 <span class="comment"># Боевой запуск (DEMO):</span>
-<span class="cmd">python scripts\metka_bot.py --lot 0.1 --tp-points 50 --sl-points 50</span></code></pre>
+<span class="cmd">python scripts\metka_bot.py --lot 0.1 --tp-points 80 --sl-points 40</span></code></pre>
         <p>Пример вывода:</p>
         <pre><code>[2026-04-10 16:41]  цена=3287.50  позиций: 0  [pin_bar_buy | STRONG]
 [2026-04-10 16:41]  цена=3287.50  позиций: 0  <span class="kw">&gt;&gt;&gt; BUY &lt;&lt;&lt;</span>  [pin_bar_buy | STRONG  str=1/0]
@@ -686,22 +686,33 @@ goldml\logs\level_inversebot_20260410_164200.log</code></pre>
       <div class="step-num">5</div>
       <div class="step-body">
         <h3>Построить датасет с Metka-признаками</h3>
-        <p>Метка: 1 если цена пошла в направлении Metka-паттерна через 5 баров; 0 иначе. TP/SL не нужны.</p>
+        <p>Метка строится по двум условиям (OR) за 8 баров:</p>
+        <table>
+          <tr><th>Условие</th><th>Long</th><th>Short</th></tr>
+          <tr><td>1 — итог через 8 баров</td><td>close[i+8] &gt; close[i]</td><td>close[i+8] &lt; close[i]</td></tr>
+          <tr><td>2 — касание TP до 8-го бара</td><td>max(high) &gt;= close[i] + $0.80</td><td>min(low) &lt;= close[i] − $0.80</td></tr>
+        </table>
+        <p><code>label = 1</code> если выполнено хотя бы одно. Это позволяет модели видеть быстрые контртрендовые сделки которые дали TP за 1–2 бара и не потерялись при взгляде только на бар 8.</p>
         <pre><code><span class="cmd">cd ~/projects/gold-ml</span>
 <span class="cmd">source .venv/bin/activate</span>
 <span class="cmd">python src/make_features_metka.py --direction long</span>
 <span class="cmd">python src/make_features_metka.py --direction short</span></code></pre>
         <p>Результат в <code>data/</code>:</p>
         <div class="file-tree">
-<span class="file">dataset_metka_M1_h5_long.parquet</span>
-<span class="file">dataset_metka_M1_h5_short.parquet</span>
+<span class="file">dataset_metka_M1_h8_long.parquet</span>
+<span class="file">dataset_metka_M1_h8_short.parquet</span>
         </div>
         <p>Скрипт выводит сколько Metka-баров (BUY/SELL) найдено в истории — реальная частота сигналов.</p>
         <table>
           <tr><th>Параметр</th><th>По умолчанию</th><th>Описание</th></tr>
-          <tr><td>--horizon</td><td>5</td><td>Баров вперёд для оценки направления</td></tr>
+          <tr><td>--horizon</td><td>8</td><td>Баров вперёд (8 минут)</td></tr>
+          <tr><td>--min-move</td><td>0.80</td><td>Мин. движение для условия 2 ($0.80 = 80 пунктов)</td></tr>
           <tr><td>--direction</td><td>long</td><td>long = BUY, short = SELL</td></tr>
         </table>
+        <div class="note">
+          Ожидаемый % меток label=1: ~40–50% — нормальный баланс для обучения.<br>
+          При <code>min-move=0</code> label=1 было бы у ~95% баров — модель стала бы бесполезной.
+        </div>
       </div>
     </div>
 
@@ -714,17 +725,17 @@ goldml\logs\level_inversebot_20260410_164200.log</code></pre>
         <p>После обучения выводится таблица PnL для нескольких TP/SL комбинаций:</p>
         <pre><code> Порог | Сигналов |  ~в день |  Winrate |  PnL/сделку (TP/SL пункты)
 ----------------------------------------------------------------------
-  0.55 |   14 820 |     14.4 |    53.8% |  50/50: +3.8п  100/50: +31.3п  50/30: +13.4п
-  0.60 |    8 103 |      7.9 |    57.4% |  50/50: +14.8п  100/50: +48.6п  50/30: +21.9п
-  0.65 |    3 210 |      3.1 |    62.1% |  50/50: +24.2п  100/50: +67.2п  50/30: +30.6п</code></pre>
+  0.55 |   18 420 |     17.9 |    55.1% |  80/80: +8.2п  100/50: +38.1п  80/40: +18.2п
+  0.60 |    9 810 |      9.6 |    59.3% |  80/80: +18.5п  100/50: +54.3п  80/40: +27.3п
+  0.65 |    3 940 |      3.8 |    64.2% |  80/80: +28.4п  100/50: +72.7п  80/40: +36.4п</code></pre>
         <p>Результат в <code>models/</code>:</p>
         <div class="file-tree">
-<span class="file">metka_lgbm_M1_h5_long.joblib</span>
-<span class="file">metka_meta_M1_h5_long.json</span>
-<span class="file">metka_lgbm_M1_h5_short.joblib</span>
-<span class="file">metka_meta_M1_h5_short.json</span>
+<span class="file">metka_lgbm_M1_h8_long.joblib</span>
+<span class="file">metka_meta_M1_h8_long.json</span>
+<span class="file">metka_lgbm_M1_h8_short.joblib</span>
+<span class="file">metka_meta_M1_h8_short.json</span>
         </div>
-        <p>Рекомендуемый порог: <strong>0.62–0.65</strong>.</p>
+        <p>Рекомендуемый порог: <strong>0.62–0.65</strong> (~4–10 сделок в день из ~70–100 сигналов Метки).</p>
         <div class="note">
           Модель видит: паттерн Метки (пин-бар? squeeze?), RSI, ATR, час, день недели и ~50 других признаков.
           Учится отличать "синие" метки от "чёрных" по рыночному контексту.
@@ -738,10 +749,10 @@ goldml\logs\level_inversebot_20260410_164200.log</code></pre>
         <h3>Файлы для Windows (Метка + ML)</h3>
         <div class="file-tree">
 <span class="dir">models\</span>
-├── <span class="file">metka_lgbm_M1_h5_long.joblib</span>
-├── <span class="file">metka_meta_M1_h5_long.json</span>
-├── <span class="file">metka_lgbm_M1_h5_short.joblib</span>
-└── <span class="file">metka_meta_M1_h5_short.json</span>
+├── <span class="file">metka_lgbm_M1_h8_long.joblib</span>
+├── <span class="file">metka_meta_M1_h8_long.json</span>
+├── <span class="file">metka_lgbm_M1_h8_short.joblib</span>
+└── <span class="file">metka_meta_M1_h8_short.json</span>
 <span class="dir">scripts\</span>
 ├── <span class="file">metka_bot.py</span>
 ├── <span class="file">metka_inversebot.py</span>
@@ -758,7 +769,7 @@ goldml\logs\level_inversebot_20260410_164200.log</code></pre>
 <span class="cmd">python scripts\metka_bot.py --use-model --dry-run</span>
 
 <span class="comment"># Боевой (DEMO) с ML-фильтром, порог 0.65:</span>
-<span class="cmd">python scripts\metka_bot.py --use-model --threshold 0.65 --lot 0.1 --tp-points 50 --sl-points 50</span></code></pre>
+<span class="cmd">python scripts\metka_bot.py --use-model --threshold 0.65 --lot 0.1 --tp-points 80 --sl-points 40</span></code></pre>
         <p>Пример вывода с ML-фильтром (метка есть, но ML блокирует):</p>
         <pre><code>[2026-04-10 03:12]  цена=3241.20  позиций: 0  (Metka есть, ML блокирует)  [pin_bar_buy  ML: long=0.481 short=0.210]
 [2026-04-10 14:35]  цена=3287.50  позиций: 0  <span class="kw">&gt;&gt;&gt; BUY &lt;&lt;&lt;</span>  [pin_bar_buy | STRONG  ML: long=0.713 short=0.198]
@@ -770,8 +781,8 @@ goldml\logs\level_inversebot_20260410_164200.log</code></pre>
           <tr><td>--threshold</td><td>0.62</td><td>Порог ML-фильтра (0.0–1.0). Только с --use-model</td></tr>
           <tr><td>--lot</td><td>None</td><td>Фиксированный лот (отменяет --risk)</td></tr>
           <tr><td>--risk</td><td>1.0</td><td>Риск на сделку, % от баланса</td></tr>
-          <tr><td>--tp-points</td><td>50</td><td>Тейк-профит в пунктах</td></tr>
-          <tr><td>--sl-points</td><td>50</td><td>Стоп-лосс в пунктах</td></tr>
+          <tr><td>--tp-points</td><td>80</td><td>Тейк-профит в пунктах ($0.80 минимум под модель)</td></tr>
+          <tr><td>--sl-points</td><td>40</td><td>Стоп-лосс в пунктах (R:R 2:1)</td></tr>
           <tr><td>--max-trades-day</td><td>50</td><td>Макс. сделок в день</td></tr>
           <tr><td>--cooldown</td><td>60</td><td>Пауза между сделками (секунды)</td></tr>
           <tr><td>--dry-run</td><td>выкл</td><td>Без реальных ордеров</td></tr>

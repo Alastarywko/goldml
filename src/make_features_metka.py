@@ -1,16 +1,16 @@
 """
 Строит датасет для metka-бота.
 
-Метка: направление цены через N баров.
-  1 = цена выросла (close[i+horizon] > close[i])
-  0 = цена упала  (close[i+horizon] < close[i])
+Обучение ТОЛЬКО на барах где сработал сигнал Метки (metka_buy / metka_sell).
+Модель отвечает на вопрос: «этот конкретный сигнал Метки — синий или чёрный?»
 
-TP/SL не фиксируются — ставишь любые при запуске бота.
+Метка (OR-условие за horizon баров):
+  long:  1 если high достиг close[i]+min_move  ИЛИ  close[i+horizon] > close[i]
+  short: 1 если low  достиг close[i]-min_move  ИЛИ  close[i+horizon] < close[i]
 
 Запуск:
     python src/make_features_metka.py --direction long
     python src/make_features_metka.py --direction short
-    python src/make_features_metka.py --direction long --horizon 5
 """
 
 import argparse
@@ -29,22 +29,43 @@ from metka_features import build_all_features  # noqa: E402
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--tf",        default="M1")
-    p.add_argument("--horizon",   type=int, default=5,
-                   help="Баров вперёд (default: 5 мин)")
+    p.add_argument("--horizon",   type=int,   default=8,
+                   help="Баров вперёд (default: 8 мин)")
+    p.add_argument("--min-move",  type=float, default=0.80,
+                   help="Мин. движение $ для OR-условия (80 пунктов = $0.80)")
     p.add_argument("--direction", default="long", choices=["long", "short"])
     return p.parse_args()
 
 
-def add_label(df: pd.DataFrame, horizon: int, direction: str) -> pd.DataFrame:
-    future_close  = df["close"].shift(-horizon)
-    current_close = df["close"]
+def add_label(df: pd.DataFrame, horizon: int, direction: str,
+              min_move: float = 0.80) -> pd.DataFrame:
+    """
+    label = 1 если выполнено хотя бы одно из двух за horizon баров:
+      long:  high достиг entry+min_move  ИЛИ  close[i+horizon] > entry
+      short: low  достиг entry-min_move  ИЛИ  close[i+horizon] < entry
+    """
+    close_vals = df["close"].values
+    high_vals  = df["high"].values
+    low_vals   = df["low"].values
+    n = len(df)
+    labels = np.full(n, np.nan)
 
-    if direction == "long":
-        df["label"] = (future_close > current_close).astype(np.int8)
-    else:
-        df["label"] = (future_close < current_close).astype(np.int8)
+    for i in range(n - horizon):
+        entry           = close_vals[i]
+        future_h        = high_vals[i+1 : i+horizon+1]
+        future_l        = low_vals[i+1  : i+horizon+1]
+        future_close    = close_vals[i+horizon]
 
-    df.loc[df.index[-horizon:], "label"] = np.nan
+        if direction == "long":
+            cond1 = future_h.max() >= entry + min_move
+            cond2 = future_close > entry
+        else:
+            cond1 = future_l.min() <= entry - min_move
+            cond2 = future_close < entry
+
+        labels[i] = 1 if (cond1 or cond2) else 0
+
+    df["label"] = labels
     df = df.dropna(subset=["label"])
     df["label"] = df["label"].astype(np.int8)
     return df
@@ -52,7 +73,7 @@ def add_label(df: pd.DataFrame, horizon: int, direction: str) -> pd.DataFrame:
 
 def main() -> None:
     args = parse_args()
-    src = DATA_DIR / f"XAUUSD_TickData_{args.tf}.parquet"
+    src  = DATA_DIR / f"XAUUSD_TickData_{args.tf}.parquet"
     if not src.is_file():
         raise FileNotFoundError(f"Нет файла: {src}")
 
@@ -64,29 +85,38 @@ def main() -> None:
     print("Строим базовые + metka признаки...")
     df = build_all_features(df)
 
-    print(f"Строим метку (direction={args.direction}, horizon={args.horizon} баров)...")
-    df = add_label(df, args.horizon, args.direction)
+    # ── Метка ──────────────────────────────────────────────────
+    min_move = args.min_move
+    print(f"Строим метку (direction={args.direction}, horizon={args.horizon}, min_move=${min_move})...")
+    df = add_label(df, args.horizon, args.direction, min_move=min_move)
 
     exclude = {"open", "high", "low", "close", "volume", "label"}
     feature_cols = [c for c in df.columns if c not in exclude]
     df = df.dropna(subset=feature_cols)
 
-    out = DATA_DIR / f"dataset_metka_{args.tf}_h{args.horizon}_{args.direction}.parquet"
-    df.to_parquet(out)
+    # ── Фильтр: оставляем ТОЛЬКО бары с сигналом Метки ────────
+    sig_col = "metka_buy" if args.direction == "long" else "metka_sell"
+    total_before = len(df)
+    df = df[df[sig_col] == 1].copy()
+    print(f"\nОтфильтровано до Metka-сигналов ({sig_col}=1): "
+          f"{total_before:,} → {len(df):,} строк "
+          f"(~{len(df) / max((df.index[-1]-df.index[0]).days,1):.0f}/день)")
+
+    if len(df) < 500:
+        print("[!] Слишком мало сигналов для обучения. Проверь данные.")
+        return
 
     pos   = df["label"].sum()
     total = len(df)
-    print(f"\nГотово. Строк: {total:,}")
-    print(f"Метка 1 ({args.direction}): {pos:,}  ({100*pos/total:.1f}%)")
-    print(f"Метка 0 (против):          {total-pos:,}  ({100*(total-pos)/total:.1f}%)")
+    days  = max((df.index[-1] - df.index[0]).days, 1)
+    print(f"\nМетка 1 (синяя/{args.direction}): {pos:,}  ({100*pos/total:.1f}%)")
+    print(f"Метка 0 (чёрная):                {total-pos:,}  ({100*(total-pos)/total:.1f}%)")
+    print(f"Период: {df.index[0].date()} → {df.index[-1].date()}  ({days} дней)")
 
-    buy_sigs  = df["metka_buy"].sum()
-    sell_sigs = df["metka_sell"].sum()
-    days = max((df.index[-1] - df.index[0]).days, 1)
-    print(f"\nMetka BUY  сигналов в истории: {int(buy_sigs):,}  (~{buy_sigs/days:.0f}/день)")
-    print(f"Metka SELL сигналов в истории: {int(sell_sigs):,}  (~{sell_sigs/days:.0f}/день)")
+    out = DATA_DIR / f"dataset_metka_{args.tf}_h{args.horizon}_{args.direction}.parquet"
+    df.to_parquet(out)
     print(f"Признаков: {len(feature_cols)}")
-    print(f"\nСохранено: {out}")
+    print(f"Сохранено: {out}")
 
 
 if __name__ == "__main__":

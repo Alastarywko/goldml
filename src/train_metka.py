@@ -7,11 +7,11 @@ TP/SL не фиксированы в метке — ставишь любые п
     python src/train_metka.py --direction short
 
 Результат:
-    models/metka_lgbm_M1_h5_long.joblib
-    models/metka_meta_M1_h5_long.json
+    models/metka_lgbm_M1_h8_long.joblib
+    models/metka_meta_M1_h8_long.json
 
 Запуск бота (любые TP/SL):
-    python scripts/metka_bot.py --use-model --tp-points 50 --sl-points 50
+    python scripts/metka_bot.py --use-model --tp-points 80 --sl-points 40
     python scripts/metka_bot.py --use-model --tp-points 100 --sl-points 50
 """
 
@@ -37,7 +37,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser()
     p.add_argument("--tf",        default="M1")
-    p.add_argument("--horizon",   type=int,   default=5)
+    p.add_argument("--horizon",   type=int,   default=8)
     p.add_argument("--direction", default="long", choices=["long", "short"])
     p.add_argument("--threshold", type=float, default=0.55)
     return p.parse_args()
@@ -174,7 +174,7 @@ def save_model(model: lgb.LGBMClassifier, auc: float,
     print(f"\nМодель : {mpath}")
     print(f"Мета   : {jpath}")
     print(f"\nЗапуск бота (примеры):")
-    print(f"  python scripts\\metka_bot.py --use-model --tp-points 50 --sl-points 50")
+    print(f"  python scripts\\metka_bot.py --use-model --tp-points 80 --sl-points 40")
     print(f"  python scripts\\metka_bot.py --use-model --tp-points 100 --sl-points 50")
 
 

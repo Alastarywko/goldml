@@ -202,8 +202,8 @@ def run(args: argparse.Namespace) -> None:
             Path(args.models_dir) if args.models_dir
             else Path(__file__).resolve().parent.parent / "models"
         )
-        tag_long  = "M1_h5_long"
-        tag_short = "M1_h5_short"
+        tag_long  = "M1_h8_long"
+        tag_short = "M1_h8_short"
         try:
             model_long, meta_long = load_metka_model(models_dir, tag_long)
             feature_cols = meta_long["feature_cols"]
